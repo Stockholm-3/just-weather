@@ -1,8 +1,8 @@
-# Etherskies
+# Just Weather
 
 > A CLI weather tool for checking current weather conditions in cities worldwide.
 
-Etherskies is a command-line weather application that fetches real-time weather data from Open-Meteo API. Built as a school project at Chas Academy (SUVX25) by Team Stockholm 1.
+Just Weather is a command-line weather application that fetches real-time weather data from Open-Meteo API. Built as a school project at Chas Academy (SUVX25) by Team Stockholm 3.
 
 ![C](https://img.shields.io/badge/c-%2300599C.svg?style=flat&logo=c&logoColor=white)
 ![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black)
@@ -46,15 +46,15 @@ brew install curl
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/timackevald/etherskies.git
-cd etherskies
+git clone https://github.com/Stockholm-3/just-weather.git
+cd just-weather
 ```
 
 2. Ensure the lib branch is cloned into ../lib:
 
 To clone the jansson library from project root run:
 ```bash
-git clone --branch lib --single-branch https://github.com/timackevald/etherskies.git ../lib
+git clone --branch lib --single-branch https://github.com/Stockholm-3/just-weather.git ../lib
 ```
 This will create a lib folder outside of the root with all library source files.
 
@@ -77,7 +77,7 @@ make run
 
 ## Usage
 
-When you run Etherskies, you'll see a list of available cities:
+When you run Just Weather, you'll see a list of available cities:
 
 ```
 Stockholm
@@ -102,7 +102,7 @@ Type `q` to exit the application.
 ## Project Structure
 
 ```
-etherskies/
+just-weather/
 ├── src/
 │   ├── main.c           # Entry point
 │   └── libs/
@@ -195,7 +195,7 @@ https://api.open-meteo.com/v1/forecast?latitude=59.33&longitude=18.07&current=te
 
 ## Authors
 
-**Team Stockholm 1**
+**Team Stockholm 3**
 - Chas Academy, SUVX25
 - 2025-09-10
 

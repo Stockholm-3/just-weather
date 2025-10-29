@@ -17,7 +17,7 @@ typedef struct TCPClient {
 
 } TCPClient;
 
-int TCPClient_Initiate(TCPClient* c);
+int TCPClient_Initiate(TCPClient* c, int _FD);
 
 int TCPClient_Connect(TCPClient* c, const char* host, const char* port);
 

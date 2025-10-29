@@ -1,11 +1,16 @@
+
+
 #include "TCPClient.h"
 
-int TCPClient_Initiate(TCPClient* c) {
-    c->fd = -1;
+int TCPClient_Initiate(TCPClient* c, int fd) {
+    c->fd = fd;
     return 0;
 }
 
 int TCPClient_Connect(TCPClient* c, const char* host, const char* port) {
+    if (c->fd >= 0)
+        return -1;
+
     struct addrinfo  hints = {0};
     struct addrinfo* res   = NULL;
 

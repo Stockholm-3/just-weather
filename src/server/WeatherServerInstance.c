@@ -1,6 +1,7 @@
 #include "WeatherServerInstance.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 
 //-----------------Internal Functions-----------------
 

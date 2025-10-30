@@ -2,8 +2,6 @@
 #include "smw.h"
 #include "utils.h"
 
-#include <stdio.h>
-
 int main() {
     smw_init();
 

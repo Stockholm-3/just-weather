@@ -4,8 +4,8 @@
 CC          := gcc
 SRC_DIR     := src
 BUILD_DIR   := build
-BIN_SERVER  := $(BUILD_DIR)/server/etherskies
-BIN_CLIENT  := $(BUILD_DIR)/client/etherskies
+BIN_SERVER  := $(BUILD_DIR)/server/just-weather
+BIN_CLIENT  := $(BUILD_DIR)/client/just-weather
 
 # Compiler flags:
 #  -std=c99 : C99 standard
@@ -13,7 +13,7 @@ BIN_CLIENT  := $(BUILD_DIR)/client/etherskies
 #  -MMD -MP  : auto-generate dependency files
 #  -Isrc/libs : include your project headers
 #  -Isrc/jansson/src : include Jansson headers directly from its src folder
-CFLAGS      := -MMD -MP -Ilib/jansson -Isrc/lib -Isrc/server -Iincludes -g
+CFLAGS      := -Wall -Werror -Wfatal-errors -MMD -MP -Ilib/jansson -Isrc/lib -Isrc/server -Iincludes -g
 JANSSON_CFLAGS := $(filter-out -Werror -Wfatal-errors,$(CFLAGS)) -w
 
 # Linker flags and libraries

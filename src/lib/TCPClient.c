@@ -1,5 +1,3 @@
-
-
 #include "TCPClient.h"
 
 int TCPClient_Initiate(TCPClient* c, int fd) {
@@ -54,11 +52,42 @@ int TCPClient_Connect(TCPClient* c, const char* host, const char* port) {
 }
 
 int TCPClient_Write(TCPClient* c, const uint8_t* buf, int len) {
-    return send(c->fd, buf, len, MSG_NOSIGNAL);
+    return send(c->fd, buf, len, 0);
 }
 
 int TCPClient_Read(TCPClient* c, uint8_t* buf, int len) {
-    return recv(c->fd, buf, len, MSG_DONTWAIT); // icke-blockerande läsning
+    return recv(c->fd, buf, len, 0);
+}
+
+// Writes all data from buf to socket
+int TCPClient_WriteAll(TCPClient* c, const uint8_t* buf, int len) {
+    int total_sent = 0;
+
+    while (total_sent < len) {
+        int n = TCPClient_Write(c, buf + total_sent, len - total_sent);
+        if (n < 0)
+            return -1;
+        total_sent += n;
+    }
+
+    return total_sent;
+}
+
+// Revives all data that can fit in the give buf
+// if messages is longer that buf the messages will be cut of
+int TCPClient_ReadAll(TCPClient* c, uint8_t* buf, int len) {
+    int total_received = 0;
+
+    while (total_received < len) {
+        int n = TCPClient_Read(c, buf + total_received, len - total_received);
+        if (n < 0)
+            return -1; // error
+        if (n == 0)
+            break; // connection closed
+        total_received += n;
+    }
+
+    return total_received;
 }
 
 void TCPClient_Disconnect(TCPClient* c) {

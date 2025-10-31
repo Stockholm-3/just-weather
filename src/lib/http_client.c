@@ -8,30 +8,30 @@
 #include <stdlib.h>
 #include <string.h>
 
-void HTTPClient_init(HTTPClient* c, int FD) {
+void http_client_init(HttpClient* c, int fd) {
     TCPClient tcp_client;
-    TCPClient_Initiate(&tcp_client, FD);
+    TCPClient_Initiate(&tcp_client, fd);
     c->tcp_client = tcp_client;
 }
 
-int HTTPClient_initPtr(HTTPClient** c, int FD) {
-    HTTPClient* http_client = (HTTPClient*)malloc(sizeof(HTTPClient));
+int http_client_init_ptr(HttpClient** c, int fd) {
+    HttpClient* http_client = (HttpClient*)malloc(sizeof(HttpClient));
     if (!http_client) {
         return -1;
     }
 
-    HTTPClient_init(http_client, FD);
+    http_client_init(http_client, fd);
     *c = http_client;
     return 0;
 }
 
-int HTTPClient_connect(HTTPClient* c, const char* host, const char* port) {
+int http_client_connect(HttpClient* c, const char* host, const char* port) {
     c->host = (char*)host;
     return TCPClient_Connect(&c->tcp_client, host, port);
 }
 
-int HTTPClient_Write(HTTPClient* c, const char* endpoint, const char* method,
-                     const char* body) {
+int http_client_write(HttpClient* c, const char* endpoint, const char* method,
+                      const char* body) {
     char* response_body = NULL;
     if (!body) {
         response_body = "";
@@ -68,20 +68,20 @@ int HTTPClient_Write(HTTPClient* c, const char* endpoint, const char* method,
     return sent;
 }
 
-int HTTPClient_Read(HTTPClient* c, uint8_t* buf, int len,
-                    response_callback callback) {
+int http_client_read(HttpClient* c, uint8_t* buf, int len,
+                     ResponseCallback callback) {
     int recived = TCPClient_ReadAll(&c->tcp_client, buf, len);
     callback((char*)buf);
     return recived;
 }
 
-void HTTPClient_Disconnect(HTTPClient* c) {
+void http_client_disconnect(HttpClient* c) {
     TCPClient_Disconnect(&c->tcp_client);
 }
 
-void HTTPClient_Dispose(HTTPClient* c) { TCPClient_Dispose(&c->tcp_client); }
+void http_client_dispose(HttpClient* c) { TCPClient_Dispose(&c->tcp_client); }
 
-void HTTPClient_DisposePtr(HTTPClient* c) {
-    HTTPClient_Dispose(c);
+void http_client_dispose_ptr(HttpClient* c) {
+    http_client_dispose(c);
     free(c);
 }

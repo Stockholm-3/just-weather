@@ -1,7 +1,7 @@
 // Simple TCP client.
 // It has ReadAll and WriteAll helper functions.
-#ifndef __TCPClient_h_
-#define __TCPClient_h_
+#ifndef TCP_CLIENT_H
+#define TCP_CLIENT_H
 
 #define _POSIX_C_SOURCE 200809L
 #include <fcntl.h>
@@ -32,4 +32,4 @@ void TCPClient_Disconnect(TCPClient* c);
 
 void TCPClient_Dispose(TCPClient* c);
 
-#endif // __TCPClient_h_
+#endif // TCP_CLIENT_H

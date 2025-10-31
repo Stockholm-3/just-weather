@@ -1,6 +1,5 @@
-
-#ifndef __HTTPServerConnection_h_
-#define __HTTPServerConnection_h_
+#ifndef HTTP_SERVER_CONNECTION_H
+#define HTTP_SERVER_CONNECTION_H
 
 #include "../tcp_client.h"
 #include "smw.h"
@@ -38,4 +37,4 @@ void HTTPServerConnection_SetCallback(
 void HTTPServerConnection_Dispose(HTTPServerConnection* _Connection);
 void HTTPServerConnection_DisposePtr(HTTPServerConnection** _ConnectionPtr);
 
-#endif //__HTTPServerConnection_h_
+#endif // HTTP_SERVER_CONNECTION_H

@@ -1,6 +1,5 @@
-
-#ifndef __smw_h_
-#define __smw_h_
+#ifndef SMW_H
+#define SMW_H
 
 #include <stdint.h>
 
@@ -33,4 +32,4 @@ int smw_getTaskCount();
 
 void smw_dispose();
 
-#endif //__smw_h
+#endif // SMW_H

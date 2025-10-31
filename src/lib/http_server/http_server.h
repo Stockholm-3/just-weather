@@ -1,6 +1,6 @@
 
-#ifndef __HTTPServer_h_
-#define __HTTPServer_h_
+#ifndef HTTP_SERVER_H
+#define HTTP_SERVER_H
 
 #include "../tcp_server.h"
 #include "http_server_connection.h"
@@ -25,4 +25,4 @@ int HTTPServer_InitiatePtr(HTTPServer_OnConnection _OnConnection,
 void HTTPServer_Dispose(HTTPServer* _Server);
 void HTTPServer_DisposePtr(HTTPServer** _ServerPtr);
 
-#endif //__HTTPServer_h_
+#endif //HTTP_SERVER_H

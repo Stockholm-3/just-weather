@@ -1,6 +1,5 @@
-
-#ifndef __WeatherServerInstance_h_
-#define __WeatherServerInstance_h_
+#ifndef WEATHER_SERVER_INSTANCE_H
+#define WEATHER_SERVER_INSTANCE_H
 
 #include "http_server/http_server_connection.h"
 #include "smw.h"
@@ -21,4 +20,4 @@ void WeatherServerInstance_Work(WeatherServerInstance* _Instance,
 void WeatherServerInstance_Dispose(WeatherServerInstance* _Instance);
 void WeatherServerInstance_DisposePtr(WeatherServerInstance** _InstancePtr);
 
-#endif //__WeatherServerInstance_h_
+#endif // WEATHER_SERVER_INSTANCE_H

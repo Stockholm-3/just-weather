@@ -30,7 +30,7 @@ CheckOptions:
   - key: readability-identifier-naming.ParameterCase
     value: lower_case
   - key: readability-identifier-naming.TypedefCase
-    value: lower_case
+    value: CamelCase
 
   # Structs, unions, and enums use PascalCase (common C convention)
   - key: readability-identifier-naming.StructCase

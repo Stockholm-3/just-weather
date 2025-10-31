@@ -11,9 +11,9 @@ void custom_callback(const char* response) {
 }
 
 int main(void) {
-    HTTPClient* http_client = NULL;
+    HttpClient* http_client = NULL;
 
-    if (HTTPClient_initPtr(&http_client, -1)) {
+    if (http_client_init_ptr(&http_client, -1)) {
         perror("failed to create HTTPClient");
         return -1;
     };
@@ -24,7 +24,7 @@ int main(void) {
     //         return -1;
     //     }
 
-    if (HTTPClient_connect(http_client, "httpbin.org", "80") != 0) {
+    if (http_client_connect(http_client, "httpbin.org", "80") != 0) {
         perror("Connection failed");
         return -1;
     }
@@ -36,10 +36,10 @@ int main(void) {
                        "\"temperature\": \"<temperature>°C\""
                        "}";
 
-    HTTPClient_Write(http_client, "/post", "POST", body);
+    http_client_write(http_client, "/post", "POST", body);
 
     uint8_t response[4000];
-    HTTPClient_Read(http_client, response, sizeof(response), custom_callback);
+    http_client_read(http_client, response, sizeof(response), custom_callback);
 
-    HTTPClient_DisposePtr(http_client);
+    http_client_dispose_ptr(http_client);
 }

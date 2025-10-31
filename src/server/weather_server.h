@@ -1,11 +1,11 @@
 
-#ifndef __WeatherServer_h_
-#define __WeatherServer_h_
+#ifndef WEATHER_SERVER_H
+#define WEATHER_SERVER_H
 
 #include "http_server/http_server.h"
-#include "weather_server_instance.h"
 #include "linked_list.h"
 #include "smw.h"
+#include "weather_server_instance.h"
 
 typedef struct {
     HTTPServer httpServer;
@@ -22,4 +22,4 @@ int WeatherServer_InitiatePtr(WeatherServer** _ServerPtr);
 void WeatherServer_Dispose(WeatherServer* _Server);
 void WeatherServer_DisposePtr(WeatherServer** _ServerPtr);
 
-#endif //__WeatherServer_h_
+#endif // WEATHER_SERVER_H

@@ -1,6 +1,5 @@
-
-#ifndef __TCPServer_h_
-#define __TCPServer_h_
+#ifndef TCP_SERVER_H
+#define TCP_SERVER_H
 
 #define _POSIX_C_SOURCE 200809L
 #include "smw.h"
@@ -44,4 +43,4 @@ static inline int TCPServer_Nonblocking(int fd) {
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-#endif //__TCPServer_h_
+#endif // TCP_SERVER_H

@@ -1,8 +1,8 @@
 /// Simple TCP based HTTP client that writes and reads all.
 /// This is a blocking HTTPClient
 /// Written on top of TCPClient.h
-#ifndef __HTTPClient_h_
-#define __HTTPClient_h_
+#ifndef HTTP_CLIENT_H
+#define HTTP_CLIENT_H
 
 #include "tcp_client.h"
 
@@ -12,37 +12,37 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-typedef void (*response_callback)(const char* response);
+typedef void (*ResponseCallback)(const char* response);
 
 typedef struct {
     TCPClient tcp_client;
     char*     host;
 
-} HTTPClient;
+} HttpClient;
 
-void HTTPClient_init(HTTPClient* c, int FD);
+void http_client_init(HttpClient* c, int fd);
 
 // Create HTTPClient on heap
 // Make sure to use HTTPClient_DisposePtr to dispose it correctly
-int HTTPClient_initPtr(HTTPClient** c, int FD);
+int http_client_init_ptr(HttpClient** c, int fd);
 
-int HTTPClient_connect(HTTPClient* c, const char* host, const char* port);
+int http_client_connect(HttpClient* c, const char* host, const char* port);
 
 /// Creats relevant headers from method and endpoint.
 /// Uses Connection: close header to intsantly close.
 /// Adds correct body length header
-int HTTPClient_Write(HTTPClient* c, const char* endpoint, const char* method,
+int http_client_write(HttpClient* c, const char* endpoint, const char* method,
                      const char* body);
 
 // Reads all data that it can into the give buffer at once.
 // If the buffer is too small the message will be cut of.
-int HTTPClient_Read(HTTPClient* c, uint8_t* buf, int len,
-                    response_callback callback);
+int http_client_read(HttpClient* c, uint8_t* buf, int len,
+                    ResponseCallback callback);
 
-void HTTPClient_Disconnect(HTTPClient* c);
+void http_client_disconnect(HttpClient* c);
 
-void HTTPClient_Dispose(HTTPClient* c);
+void http_client_dispose(HttpClient* c);
 
-void HTTPClient_DisposePtr(HTTPClient* c);
+void http_client_dispose_ptr(HttpClient* c);
 
-#endif // __HTTPClient_h_
+#endif // HTTP_CLIENT_H

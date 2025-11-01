@@ -3,7 +3,7 @@
 #ifndef TCP_CLIENT_H
 #define TCP_CLIENT_H
 
-#define _POSIX_C_SOURCE 200809L
+#define POSIX_C_SOURCE 200809L
 #include <fcntl.h>
 #include <netdb.h>
 #include <stdint.h>

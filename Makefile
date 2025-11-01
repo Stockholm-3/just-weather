@@ -105,6 +105,20 @@ clean:
 format:
 	find . \( -name '*.c' -o -name '*.h' \) -print0 | xargs -0 clang-format -i -style=file
 
+.PHONY: lint
+lint:
+	@echo "Running clang-tidy using compile_commands.json..."
+	@find src \( -name '*.c' -o -name '*.h' \) ! -path "*/jansson/*" -print0 | \
+	while IFS= read -r -d '' file; do \
+		echo "→ Linting $$file"; \
+		clang-tidy "$$file" \
+			--config-file=.clang-tidy \
+			--quiet \
+			--header-filter='^(src|includes|lib)/' \
+			--system-headers=false || true; \
+	done
+	@echo "Lint complete (see warnings above)."
+
 # ------------------------------------------------------------
 # GitHub Actions (act)
 # ------------------------------------------------------------

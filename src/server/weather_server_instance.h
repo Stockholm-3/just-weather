@@ -10,12 +10,12 @@ typedef struct {
 } WeatherServerInstance;
 
 int weather_server_instance_initiate(WeatherServerInstance* instance,
-                                   HTTPServerConnection*  connection);
+                                     HTTPServerConnection*  connection);
 int weather_server_instance_initiate_ptr(HTTPServerConnection*   connection,
-                                      WeatherServerInstance** instance_ptr);
+                                         WeatherServerInstance** instance_ptr);
 
 void weather_server_instance_work(WeatherServerInstance* instance,
-                                uint64_t               mon_time);
+                                  uint64_t               mon_time);
 
 void weather_server_instance_dispose(WeatherServerInstance* instance);
 void weather_server_instance_dispose_ptr(WeatherServerInstance** instance_ptr);

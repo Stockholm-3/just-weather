@@ -4,18 +4,19 @@
 #include <stdlib.h>
 
 LinkedList* linked_list_create() {
-    LinkedList* newList = calloc(
+    LinkedList* new_list = calloc(
         1, sizeof(LinkedList)); /* zeroed allocation, just what we need */
-    if (!newList) {
+    if (!new_list) {
         printf("[LinkedList] Allocation error in LinkedList_create\n");
         return NULL;
     }
-    return newList;
+    return new_list;
 }
 
 Node* linked_list_get_index(LinkedList* list, size_t index) {
-    if (list == NULL || index >= list->size)
+    if (list == NULL || index >= list->size) {
         return NULL;
+    }
 
     size_t pos = 0;
     Node*  cur = NULL;
@@ -38,59 +39,66 @@ Node* linked_list_get_index(LinkedList* list, size_t index) {
 }
 
 int linked_list_append(LinkedList* list, void* item) {
-    if (list == NULL)
+    if (list == NULL) {
         return 1;
-    Node* newNode = calloc(1, sizeof(Node));
-    if (newNode == NULL)
+    }
+    Node* new_node = calloc(1, sizeof(Node));
+    if (new_node == NULL) {
         return 1;
+    }
 
-    newNode->item = item;
+    new_node->item = item;
     list->size++;
 
     if (list->tail == NULL) {
-        list->head = newNode;
+        list->head = new_node;
     } else {
-        newNode->back     = list->tail;
-        list->tail->front = newNode;
+        new_node->back    = list->tail;
+        list->tail->front = new_node;
     }
-    list->tail = newNode;
+    list->tail = new_node;
 
     return 0;
 }
 
 int linked_list_insert(LinkedList* list, size_t index, void* item) {
-    if (list == NULL)
+    if (list == NULL) {
         return 1;
-    if (index >= list->size)
+    }
+    if (index >= list->size) {
         return linked_list_append(list, item); /* append fallback */
+    }
     Node* target = linked_list_get_index(list, index);
-    if (target == NULL)
+    if (target == NULL) {
         return 1;
+    }
 
-    Node* newNode = calloc(1, sizeof(Node));
-    if (newNode == NULL)
+    Node* new_node = calloc(1, sizeof(Node));
+    if (new_node == NULL) {
         return 1;
+    }
 
-    newNode->item = item;
+    new_node->item = item;
     list->size++;
 
-    newNode->back  = target->back;
-    newNode->front = target;
+    new_node->back  = target->back;
+    new_node->front = target;
 
     if (target->back != NULL) {
-        target->back->front = newNode;
+        target->back->front = new_node;
     } else {
-        list->head = newNode;
+        list->head = new_node;
     }
-    target->back = newNode;
+    target->back = new_node;
 
     return 0;
 }
 
 int linked_list_remove(LinkedList* list, Node* item,
-                      void (*free_function)(void*)) {
-    if (list == NULL || item == NULL)
+                       void (*free_function)(void*)) {
+    if (list == NULL || item == NULL) {
         return 1;
+    }
 
     Node* back  = item->back;
     Node* front = item->front;
@@ -122,16 +130,18 @@ int linked_list_remove(LinkedList* list, Node* item,
 }
 
 int linked_list_pop(LinkedList* list, size_t index,
-                   void (*free_function)(void*)) {
+                    void (*free_function)(void*)) {
     Node* item = linked_list_get_index(list, index);
-    if (item == NULL)
+    if (item == NULL) {
         return 1;
+    }
     return linked_list_remove(list, item, free_function);
 }
 
 void linked_list_clear(LinkedList* list, void (*free_function)(void*)) {
-    if (list == NULL)
+    if (list == NULL) {
         return;
+    }
     Node* cur = list->head;
     while (cur) {
         Node* next = cur->front;

@@ -9,7 +9,7 @@ int main() {
     weather_server_initiate(&server);
 
     while (1) {
-        smw_work(SystemMonotonicMS());
+        smw_work(system_monotonic_ms());
     }
 
     weather_server_dispose(&server);

@@ -62,7 +62,7 @@ int http_client_write(HttpClient* c, const char* endpoint, const char* method,
     }
 
     int sent = tcp_client_write_all(&c->tcp_client, (const uint8_t*)request,
-                                  bytes_written);
+                                    bytes_written);
     free(request);
 
     return sent;

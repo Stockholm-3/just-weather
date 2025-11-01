@@ -24,7 +24,7 @@ int smw_init();
 
 SmwTask* smw_create_task(void* context,
                          void (*callback)(void* context, uint64_t mon_time));
-void      smw_destroy_task(SmwTask* task);
+void     smw_destroy_task(SmwTask* task);
 
 void smw_work(uint64_t mon_time);
 

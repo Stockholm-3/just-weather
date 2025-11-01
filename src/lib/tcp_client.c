@@ -6,8 +6,9 @@ int tcp_client_initiate(TCPClient* c, int fd) {
 }
 
 int tcp_client_connect(TCPClient* c, const char* host, const char* port) {
-    if (c->fd >= 0)
+    if (c->fd >= 0) {
         return -1;
+    }
 
     struct addrinfo  hints = {0};
     struct addrinfo* res   = NULL;
@@ -16,8 +17,9 @@ int tcp_client_connect(TCPClient* c, const char* host, const char* port) {
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
-    if (getaddrinfo(host, port, &hints, &res) != 0)
+    if (getaddrinfo(host, port, &hints, &res) != 0) {
         return -1;
+    }
 
     /*
     Funktionen getaddrinfo() kan ge en länkad lista av adressförslag för samma
@@ -33,19 +35,22 @@ int tcp_client_connect(TCPClient* c, const char* host, const char* port) {
     for (struct addrinfo* rp = res; rp; rp = rp->ai_next) {
         fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
 
-        if (fd < 0)
+        if (fd < 0) {
             continue;
+        }
 
-        if (connect(fd, rp->ai_addr, rp->ai_addrlen) == 0)
+        if (connect(fd, rp->ai_addr, rp->ai_addrlen) == 0) {
             break;
+        }
 
         close(fd);
         fd = -1;
     }
 
     freeaddrinfo(res);
-    if (fd < 0)
+    if (fd < 0) {
         return -1;
+    }
 
     c->fd = fd;
     return 0;
@@ -65,8 +70,9 @@ int tcp_client_write_all(TCPClient* c, const uint8_t* buf, int len) {
 
     while (total_sent < len) {
         int n = tcp_client_write(c, buf + total_sent, len - total_sent);
-        if (n < 0)
+        if (n < 0) {
             return -1;
+        }
         total_sent += n;
     }
 
@@ -80,10 +86,12 @@ int tcp_client_read_all(TCPClient* c, uint8_t* buf, int len) {
 
     while (total_received < len) {
         int n = tcp_client_read(c, buf + total_received, len - total_received);
-        if (n < 0)
+        if (n < 0) {
             return -1; // error
-        if (n == 0)
+        }
+        if (n == 0) {
             break; // connection closed
+        }
         total_received += n;
     }
 
@@ -91,8 +99,9 @@ int tcp_client_read_all(TCPClient* c, uint8_t* buf, int len) {
 }
 
 void tcp_client_disconnect(TCPClient* c) {
-    if (c->fd >= 0)
+    if (c->fd >= 0) {
         close(c->fd);
+    }
 
     c->fd = -1;
 }

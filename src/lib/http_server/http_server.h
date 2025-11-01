@@ -13,7 +13,7 @@ typedef struct {
     HttpServerOnConnection onConnection;
 
     TCPServer tcpServer;
-    SmwTask* task;
+    SmwTask*  task;
 
 } HTTPServer;
 

@@ -22,7 +22,7 @@ typedef struct {
 
     uint8_t* headers;
 
-    smw_task* task;
+    SmwTask* task;
 
 } HTTPServerConnection;
 

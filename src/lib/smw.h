@@ -9,26 +9,26 @@
 
 typedef struct {
     void* context;
-    void (*callback)(void* context, uint64_t monTime);
+    void (*callback)(void* context, uint64_t mon_time);
 
-} smw_task;
+} SmwTask;
 
 typedef struct {
-    smw_task tasks[smw_max_tasks];
+    SmwTask tasks[smw_max_tasks];
 
-} smw;
+} Smw;
 
-extern smw g_smw;
+extern Smw g_smw;
 
 int smw_init();
 
-smw_task* smw_createTask(void* _Context,
-                         void (*_Callback)(void* _Context, uint64_t _MonTime));
-void      smw_destroyTask(smw_task* _Task);
+SmwTask* smw_create_task(void* context,
+                         void (*callback)(void* context, uint64_t mon_time));
+void      smw_destroy_task(SmwTask* task);
 
-void smw_work(uint64_t _MonTime);
+void smw_work(uint64_t mon_time);
 
-int smw_getTaskCount();
+int smw_get_task_count();
 
 void smw_dispose();
 

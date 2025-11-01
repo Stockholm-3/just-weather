@@ -5,57 +5,60 @@
 
 //-----------------Internal Functions-----------------
 
-int WeatherServerInstance_OnRequest(void* _Context);
+int weather_server_instance_on_request(void* context);
 
 //----------------------------------------------------
 
-int WeatherServerInstance_Initiate(WeatherServerInstance* _Instance,
-                                   HTTPServerConnection*  _Connection) {
-    _Instance->connection = _Connection;
+int weather_server_instance_initiate(WeatherServerInstance* instance,
+                                     HTTPServerConnection*  connection) {
+    instance->connection = connection;
 
-    http_server_connection_set_callback(_Instance->connection, _Instance,
-                                     WeatherServerInstance_OnRequest);
+    http_server_connection_set_callback(instance->connection, instance,
+                                        weather_server_instance_on_request);
 
     return 0;
 }
 
-int WeatherServerInstance_InitiatePtr(HTTPServerConnection*   _Connection,
-                                      WeatherServerInstance** _InstancePtr) {
-    if (_InstancePtr == NULL)
+int weather_server_instance_initiate_ptr(HTTPServerConnection*   connection,
+                                         WeatherServerInstance** instance_ptr) {
+    if (instance_ptr == NULL) {
         return -1;
+    }
 
-    WeatherServerInstance* _Instance =
+    WeatherServerInstance* instance =
         (WeatherServerInstance*)malloc(sizeof(WeatherServerInstance));
-    if (_Instance == NULL)
+    if (instance == NULL) {
         return -2;
+    }
 
-    int result = WeatherServerInstance_Initiate(_Instance, _Connection);
+    int result = weather_server_instance_initiate(instance, connection);
     if (result != 0) {
-        free(_Instance);
+        free(instance);
         return result;
     }
 
-    *(_InstancePtr) = _Instance;
+    *(instance_ptr) = instance;
 
     return 0;
 }
 
-int WeatherServerInstance_OnRequest(void* _Context) {
+int weather_server_instance_on_request(void* context) {
     printf("WeatherServerInstance_OnRequest\n");
 
     return 0;
 }
 
-void WeatherServerInstance_Work(WeatherServerInstance* _Server,
-                                uint64_t               _MonTime) {}
+void weather_server_instance_work(WeatherServerInstance* instance,
+                                  uint64_t               mon_time) {}
 
-void WeatherServerInstance_Dispose(WeatherServerInstance* _Instance) {}
+void weather_server_instance_dispose(WeatherServerInstance* instance) {}
 
-void WeatherServerInstance_DisposePtr(WeatherServerInstance** _InstancePtr) {
-    if (_InstancePtr == NULL || *(_InstancePtr) == NULL)
+void weather_server_instance_dispose_ptr(WeatherServerInstance** instance_ptr) {
+    if (instance_ptr == NULL || *(instance_ptr) == NULL) {
         return;
+    }
 
-    WeatherServerInstance_Dispose(*(_InstancePtr));
-    free(*(_InstancePtr));
-    *(_InstancePtr) = NULL;
+    weather_server_instance_dispose(*(instance_ptr));
+    free(*(instance_ptr));
+    *(instance_ptr) = NULL;
 }

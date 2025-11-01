@@ -11,7 +11,7 @@ typedef struct {
 
     LinkedList* instances;
 
-    smw_task* task;
+    SmwTask* task;
 
 } WeatherServer;
 

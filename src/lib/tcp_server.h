@@ -20,7 +20,7 @@ typedef struct {
     TcpServerOnAccept onAccept;
     void*             context;
 
-    smw_task* task;
+    SmwTask* task;
 
 } TCPServer;
 

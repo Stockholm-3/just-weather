@@ -2,7 +2,7 @@
 
 #include <string.h>
 
-smw g_smw;
+Smw g_smw;
 
 int smw_init() {
     memset(&g_smw, 0, sizeof(g_smw));
@@ -16,13 +16,13 @@ int smw_init() {
     return 0;
 }
 
-smw_task* smw_createTask(void* _Context,
-                         void (*_Callback)(void* _Context, uint64_t _MonTime)) {
+SmwTask* smw_create_task(void* context,
+                         void (*callback)(void* context, uint64_t mon_time)) {
     int i;
     for (i = 0; i < smw_max_tasks; i++) {
         if (g_smw.tasks[i].context == NULL && g_smw.tasks[i].callback == NULL) {
-            g_smw.tasks[i].context  = _Context;
-            g_smw.tasks[i].callback = _Callback;
+            g_smw.tasks[i].context  = context;
+            g_smw.tasks[i].callback = callback;
             return &g_smw.tasks[i];
         }
     }
@@ -30,13 +30,14 @@ smw_task* smw_createTask(void* _Context,
     return NULL;
 }
 
-void smw_destroyTask(smw_task* _Task) {
-    if (_Task == NULL)
+void smw_destroy_task(SmwTask* task) {
+    if (task == NULL) {
         return;
+    }
 
     int i;
     for (i = 0; i < smw_max_tasks; i++) {
-        if (&g_smw.tasks[i] == _Task) {
+        if (&g_smw.tasks[i] == task) {
             g_smw.tasks[i].context  = NULL;
             g_smw.tasks[i].callback = NULL;
             break;
@@ -44,20 +45,22 @@ void smw_destroyTask(smw_task* _Task) {
     }
 }
 
-void smw_work(uint64_t _MonTime) {
+void smw_work(uint64_t mon_time) {
     int i;
     for (i = 0; i < smw_max_tasks; i++) {
-        if (g_smw.tasks[i].callback != NULL)
-            g_smw.tasks[i].callback(g_smw.tasks[i].context, _MonTime);
+        if (g_smw.tasks[i].callback != NULL) {
+            g_smw.tasks[i].callback(g_smw.tasks[i].context, mon_time);
+        }
     }
 }
 
-int smw_getTaskCount() {
+int smw_get_task_count() {
     int counter = 0;
     int i;
     for (i = 0; i < smw_max_tasks; i++) {
-        if (g_smw.tasks[i].callback != NULL)
+        if (g_smw.tasks[i].callback != NULL) {
             counter++;
+        }
     }
 
     return counter;

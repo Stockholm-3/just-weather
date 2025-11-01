@@ -19,7 +19,7 @@ int weather_server_initiate(WeatherServer* server) {
 
     server->instances = linked_list_create();
 
-    server->task = smw_createTask(server, weather_server_task_work);
+    server->task = smw_create_task(server, weather_server_task_work);
 
     return 0;
 }
@@ -50,7 +50,7 @@ int weather_server_on_http_connection(void*                 context,
     WeatherServer* server = (WeatherServer*)context;
 
     WeatherServerInstance* instance = NULL;
-    int result = WeatherServerInstance_InitiatePtr(connection, &instance);
+    int result = weather_server_instance_initiate_ptr(connection, &instance);
     if (result != 0) {
         printf("WeatherServer_OnHTTPConnection: Failed to initiate instance\n");
         return -1;
@@ -66,13 +66,13 @@ void weather_server_task_work(void* context, uint64_t mon_time) {
 
     LinkedList_foreach(server->instances, node) {
         WeatherServerInstance* instance = (WeatherServerInstance*)node->item;
-        WeatherServerInstance_Work(instance, mon_time);
+        weather_server_instance_work(instance, mon_time);
     }
 }
 
 void weather_server_dispose(WeatherServer* server) {
     http_server_dispose(&server->httpServer);
-    smw_destroyTask(server->task);
+    smw_destroy_task(server->task);
 }
 
 void weather_server_dispose_ptr(WeatherServer** server_ptr) {

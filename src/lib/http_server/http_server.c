@@ -17,7 +17,7 @@ int http_server_initiate(HTTPServer*            server,
     tcp_server_initiate(&server->tcpServer, "8080", http_server_on_accept,
                         server);
 
-    server->task = smw_createTask(server, http_server_task_work);
+    server->task = smw_create_task(server, http_server_task_work);
 
     return 0;
 }
@@ -65,7 +65,7 @@ void http_server_task_work(void* context, uint64_t mon_time) {
 
 void http_server_dispose(HTTPServer* server) {
     tcp_server_dispose(&server->tcpServer);
-    smw_destroyTask(server->task);
+    smw_destroy_task(server->task);
 }
 
 void http_server_dispose_ptr(HTTPServer** server_ptr) {

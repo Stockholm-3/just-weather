@@ -55,7 +55,7 @@ int tcp_server_initiate(TCPServer* server, const char* port,
 
     server->listen_fd = fd;
 
-    server->task = smw_createTask(server, tcp_server_task_work);
+    server->task = smw_create_task(server, tcp_server_task_work);
 
     return 0;
 }
@@ -109,7 +109,7 @@ void tcp_server_task_work(void* context, uint64_t mon_time) {
     tcp_server_accept(server);
 }
 
-void tcp_server_dispose(TCPServer* server) { smw_destroyTask(server->task); }
+void tcp_server_dispose(TCPServer* server) { smw_destroy_task(server->task); }
 
 void tcp_server_dispose_ptr(TCPServer** server_ptr) {
     if (server_ptr == NULL || *(server_ptr) == NULL) {

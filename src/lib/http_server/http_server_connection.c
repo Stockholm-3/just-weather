@@ -16,7 +16,7 @@ int http_server_connection_initiate(HTTPServerConnection* connection, int fd) {
     connection->buffer = NULL;
 
     connection->task =
-        smw_createTask(connection, http_server_connection_task_work);
+        smw_create_task(connection, http_server_connection_task_work);
 
     return 0;
 }
@@ -113,16 +113,17 @@ void http_server_connection_task_work(void* context, uint64_t mon_time) {
     }
 }
 
-void http_server_connection_dispose(HTTPServerConnection* _Connection) {
-    tcp_client_dispose(&_Connection->tcpClient);
-    smw_destroyTask(_Connection->task);
+void http_server_connection_dispose(HTTPServerConnection* connection) {
+    tcp_client_dispose(&connection->tcpClient);
+    smw_destroy_task(connection->task);
 }
 
-void http_server_connection_dispose_ptr(HTTPServerConnection** _ConnectionPtr) {
-    if (_ConnectionPtr == NULL || *(_ConnectionPtr) == NULL)
+void http_server_connection_dispose_ptr(HTTPServerConnection** connection_ptr) {
+    if (connection_ptr == NULL || *(connection_ptr) == NULL) {
         return;
+    }
 
-    http_server_connection_dispose(*(_ConnectionPtr));
-    free(*(_ConnectionPtr));
-    *(_ConnectionPtr) = NULL;
+    http_server_connection_dispose(*(connection_ptr));
+    free(*(connection_ptr));
+    *(connection_ptr) = NULL;
 }

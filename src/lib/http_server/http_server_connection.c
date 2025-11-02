@@ -99,7 +99,7 @@ int http_server_connection_send(HTTPServerConnection* connection) {
     return 0;
 }
 
-//TODO: DIVIDE THIS FN UP INTO SMALLER PIECES FOR EASIER READING AND CHANGING
+// TODO: DIVIDE THIS FN UP INTO SMALLER PIECES FOR EASIER READING AND CHANGING
 int http_server_connection_receive(HTTPServerConnection* connection) {
     if (!connection) {
         return -1;
@@ -131,16 +131,16 @@ int http_server_connection_receive(HTTPServerConnection* connection) {
 
         for (int i = 0; i <= connection->read_buffer_size - 4; i++) {
 
-            //Checks if we have parsed all headers
+            // Checks if we have parsed all headers
             if (connection->read_buffer[i] == '\r' &&
                 connection->read_buffer[i + 1] == '\n' &&
                 connection->read_buffer[i + 2] == '\r' &&
                 connection->read_buffer[i + 3] == '\n') {
 
-                char   method[METHOD_MAX_LEN] = {0};
-                char   request_path[REQUEST_PATH_MAX_LEN]      = {0};
-                char   host[HOST_MAX_LEN]              = {0};
-                size_t content_len            = 0;
+                char   method[METHOD_MAX_LEN]             = {0};
+                char   request_path[REQUEST_PATH_MAX_LEN] = {0};
+                char   host[HOST_MAX_LEN]                 = {0};
+                size_t content_len                        = 0;
 
                 int   header_end = i + 4;
                 char* headers    = malloc(header_end + 1);
@@ -177,7 +177,7 @@ int http_server_connection_receive(HTTPServerConnection* connection) {
         }
     }
 
-    //checks if headers and body is done parsing
+    // checks if headers and body is done parsing
     if (connection->read_buffer_size >=
             connection->body_start + connection->content_len &&
         connection->body_start > 0) {

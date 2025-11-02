@@ -21,7 +21,6 @@ int tcp_client_connect(TCPClient* c, const char* host, const char* port);
 int tcp_client_write(TCPClient* c, const uint8_t* buf, size_t len);
 int tcp_client_read(TCPClient* c, uint8_t* buf, size_t len);
 
-
 int tcp_client_write_all(TCPClient* c, const uint8_t* buf, size_t len);
 int tcp_client_read_all(TCPClient* c, uint8_t* buf, size_t len);
 

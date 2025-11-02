@@ -9,10 +9,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-//Max chunks to read per iteration
+// Max chunks to read per iteration
 #define CHUNK_SIZE 256
 
-//Headers max lengths
+// Headers max lengths
 #define METHOD_MAX_LEN 9
 #define REQUEST_PATH_MAX_LEN 256
 #define HOST_MAX_LEN 256

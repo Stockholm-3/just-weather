@@ -9,6 +9,7 @@
 #include <string.h>
 
 void HTTPClient_init(HTTPClient* c, int FD) {
+
     TCPClient tcp_client;
     TCPClient_Initiate(&tcp_client, FD);
     c->tcp_client = tcp_client;

@@ -86,6 +86,34 @@ release:
 	@$(MAKE) --no-print-directory BUILD_MODE=release all
 
 # ------------------------------------------------------------
+# Debugging and Sanitizers
+# ------------------------------------------------------------
+.PHONY: debug
+debug:
+	@$(MAKE) --no-print-directory BUILD_MODE=debug all
+
+# Run server under GDB
+.PHONY: gdb-server
+gdb-server: $(BIN_SERVER)
+	@echo "Launching server in GDB..."
+	@gdb --quiet --args ./$(BIN_SERVER)
+
+# Run client under GDB
+.PHONY: gdb-client
+gdb-client: $(BIN_CLIENT)
+	@echo "Launching client in GDB..."
+	@gdb --quiet --args ./$(BIN_CLIENT)
+
+# AddressSanitizer build (for memory debugging)
+.PHONY: asan
+asan:
+	@echo "Building with AddressSanitizer..."
+	@$(MAKE) --no-print-directory \
+		CFLAGS_BASE="-g -O1 -fsanitize=address -fno-omit-frame-pointer" \
+		LDFLAGS="-fsanitize=address" \
+		all
+
+# ------------------------------------------------------------
 # Utilities
 # ------------------------------------------------------------
 .PHONY: run-server

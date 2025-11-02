@@ -1,5 +1,8 @@
 #include "tcp_client.h"
 
+#include <errno.h>
+#include <stddef.h>
+
 int tcp_client_initiate(TCPClient* c, int fd) {
     c->fd = fd;
     return 0;
@@ -39,6 +42,9 @@ int tcp_client_connect(TCPClient* c, const char* host, const char* port) {
             continue;
         }
 
+        int flags = fcntl(fd, F_GETFL, 0);
+        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+
         if (connect(fd, rp->ai_addr, rp->ai_addrlen) == 0) {
             break;
         }
@@ -56,16 +62,23 @@ int tcp_client_connect(TCPClient* c, const char* host, const char* port) {
     return 0;
 }
 
-int tcp_client_write(TCPClient* c, const uint8_t* buf, int len) {
-    return send(c->fd, buf, len, 0);
+int tcp_client_write(TCPClient* c, const uint8_t* buf, size_t len) {
+    return send(c->fd, buf, len, MSG_NOSIGNAL);
 }
 
-int tcp_client_read(TCPClient* c, uint8_t* buf, int len) {
-    return recv(c->fd, buf, len, 0);
+int tcp_client_read(TCPClient* c, uint8_t* buf, size_t len) {
+    int n = recv(c->fd, buf, len, 0); // or MSG_DONTWAIT
+    if (n < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            return 0; // no data available right now
+        }
+        return -1; // real error
+    }
+    return n;
 }
 
 // Writes all data from buf to socket
-int tcp_client_write_all(TCPClient* c, const uint8_t* buf, int len) {
+int tcp_client_write_all(TCPClient* c, const uint8_t* buf, size_t len) {
     int total_sent = 0;
 
     while (total_sent < len) {
@@ -81,7 +94,7 @@ int tcp_client_write_all(TCPClient* c, const uint8_t* buf, int len) {
 
 // Revives all data that can fit in the give buf
 // if messages is longer that buf the messages will be cut of
-int tcp_client_read_all(TCPClient* c, uint8_t* buf, int len) {
+int tcp_client_read_all(TCPClient* c, uint8_t* buf, size_t len) {
     int total_received = 0;
 
     while (total_received < len) {

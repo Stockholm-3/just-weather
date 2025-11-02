@@ -2,11 +2,9 @@
 #define WEATHER_SERVER_INSTANCE_H
 
 #include "http_server/http_server_connection.h"
-#include "smw.h"
 
 typedef struct {
     HTTPServerConnection* connection;
-
 } WeatherServerInstance;
 
 int weather_server_instance_initiate(WeatherServerInstance* instance,

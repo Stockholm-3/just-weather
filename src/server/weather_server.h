@@ -1,4 +1,3 @@
-
 #ifndef WEATHER_SERVER_H
 #define WEATHER_SERVER_H
 

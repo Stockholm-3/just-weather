@@ -1,12 +1,29 @@
+/// OnRequest callback will send context with data fields from request.
+/// In this callback you can set the write_buffer with the response you want.
 #ifndef HTTP_SERVER_CONNECTION_H
 #define HTTP_SERVER_CONNECTION_H
 
 #include "../tcp_client.h"
 #include "smw.h"
 
+#include <stddef.h>
 #include <stdint.h>
 
+//Max chunks to read per iteration
+#define CHUNK_SIZE 256
+
+//Headers max lengths
+#define METHOD_MAX_LEN 9
+#define REQUEST_PATH_MAX_LEN 256
+#define HOST_MAX_LEN 256
+
 typedef int (*HttpServerConnectionOnRequest)(void* context);
+
+typedef enum {
+    HTTP_SERVER_CONNECTION_STATE_SEND,
+    HTTP_SERVER_CONNECTION_STATE_RECEIVE,
+    HTTP_SERVER_CONNECTION_STATE_DISPOSE,
+} HttpServerConnectionState;
 
 typedef struct {
     TCPClient tcpClient;
@@ -14,15 +31,23 @@ typedef struct {
     void*                         context;
     HttpServerConnectionOnRequest onRequest;
 
-    char* method;
-    char* url;
+    char*  method;
+    char*  request_path;
+    char*  host;
+    size_t content_len;
 
-    uint8_t* buffer;
-    size_t   buffer_size;
+    uint8_t* read_buffer;
+    size_t   read_buffer_size;
 
-    uint8_t* headers;
+    uint8_t* body;
+    size_t   body_start;
 
-    SmwTask* task;
+    SmwTask*                  task;
+    HttpServerConnectionState state;
+
+    uint8_t* write_buffer;
+    size_t   write_size;
+    size_t   write_offset;
 
 } HTTPServerConnection;
 

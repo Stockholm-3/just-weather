@@ -1,5 +1,7 @@
 #include "http_server_connection.h"
 
+#include <errno.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,7 +15,17 @@ void http_server_connection_task_work(void* context, uint64_t mon_time);
 
 int http_server_connection_initiate(HTTPServerConnection* connection, int fd) {
     tcp_client_initiate(&connection->tcpClient, fd);
-    connection->buffer = NULL;
+    connection->read_buffer      = NULL;
+    connection->read_buffer_size = 0;
+    connection->method           = NULL;
+    connection->request_path     = NULL;
+    connection->host             = NULL;
+    connection->write_buffer     = NULL;
+    connection->content_len      = 0;
+    connection->write_size       = 0;
+    connection->write_offset     = 0;
+    connection->body_start       = 0;
+    connection->state            = HTTP_SERVER_CONNECTION_STATE_RECEIVE;
 
     connection->task =
         smw_create_task(connection, http_server_connection_task_work);
@@ -51,71 +63,191 @@ void http_server_connection_set_callback(
     connection->onRequest = on_request;
 }
 
-void http_server_connection_task_work(void* context, uint64_t mon_time) {
-    HTTPServerConnection* connection = (HTTPServerConnection*)context;
-    uint8_t               chunk_buffer[256];
+int http_server_connection_send(HTTPServerConnection* connection) {
+    if (!connection || !connection->write_buffer ||
+        connection->write_offset >= connection->write_size) {
+        return 0;
+    }
+
+    ssize_t sent =
+        tcp_client_write(&connection->tcpClient,
+                         connection->write_buffer + connection->write_offset,
+                         connection->write_size - connection->write_offset);
+
+    if (sent > 0) {
+        connection->write_offset += sent;
+    } else if (sent < 0) {
+        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            connection->state = HTTP_SERVER_CONNECTION_STATE_DISPOSE;
+            return -1;
+        }
+    }
+
+    // Finished sending
+    if (connection->write_offset >= connection->write_size) {
+        if (connection->write_buffer) {
+            free(connection->write_buffer);
+        }
+        connection->write_buffer = NULL;
+        connection->write_size   = 0;
+        connection->write_offset = 0;
+        // Switch back to receive for next request
+        //
+        connection->state = HTTP_SERVER_CONNECTION_STATE_DISPOSE;
+    }
+
+    return 0;
+}
+
+//TODO: DIVIDE THIS FN UP INTO SMALLER PIECES FOR EASIER READING AND CHANGING
+int http_server_connection_receive(HTTPServerConnection* connection) {
+    if (!connection) {
+        return -1;
+    }
+
+    uint8_t chunk_buffer[CHUNK_SIZE];
 
     int bytes_read = tcp_client_read(&connection->tcpClient, chunk_buffer,
                                      sizeof(chunk_buffer));
 
-    if (bytes_read > 0) {
-        int      new_size   = connection->buffer_size + bytes_read;
-        uint8_t* new_buffer = realloc(connection->buffer, new_size);
-        if (!new_buffer) {
-            return;
-        }
-        connection->buffer = new_buffer;
-        memcpy(connection->buffer + connection->buffer_size, chunk_buffer,
-               bytes_read);
-        connection->buffer_size += bytes_read;
+    printf("bytes_read: %d\n", bytes_read);
+    if (bytes_read < 0) {
+        return -1; // real error
+    } else if (bytes_read == 0) {
+        return 0;
+    }
 
-        if (!connection->headers) {
-            for (int i = 0; i <= connection->buffer_size - 4; i++) {
-                if (connection->buffer[i] == '\r' &&
-                    connection->buffer[i + 1] == '\n' &&
-                    connection->buffer[i + 2] == '\r' &&
-                    connection->buffer[i + 3] == '\n') {
-                    int header_length   = i + 4;
-                    connection->headers = malloc(header_length + 1);
-                    if (!connection->headers) {
-                        return;
-                    }
-                    memcpy(connection->headers, connection->buffer,
-                           header_length);
-                    connection->headers[header_length] = '\0';
-                    break;
+    size_t   new_size   = connection->read_buffer_size + bytes_read;
+    uint8_t* new_buffer = realloc(connection->read_buffer, new_size);
+    if (!new_buffer) {
+        return -1;
+    }
+
+    connection->read_buffer = new_buffer;
+    memcpy(connection->read_buffer + connection->read_buffer_size, chunk_buffer,
+           bytes_read);
+    connection->read_buffer_size += bytes_read;
+
+    if (connection->body_start == 0) {
+
+        for (int i = 0; i <= connection->read_buffer_size - 4; i++) {
+
+            //Checks if we have parsed all headers
+            if (connection->read_buffer[i] == '\r' &&
+                connection->read_buffer[i + 1] == '\n' &&
+                connection->read_buffer[i + 2] == '\r' &&
+                connection->read_buffer[i + 3] == '\n') {
+
+                char   method[METHOD_MAX_LEN] = {0};
+                char   request_path[REQUEST_PATH_MAX_LEN]      = {0};
+                char   host[HOST_MAX_LEN]              = {0};
+                size_t content_len            = 0;
+
+                int   header_end = i + 4;
+                char* headers    = malloc(header_end + 1);
+                if (!headers) {
+                    return -1;
                 }
-            }
 
-            if (connection->headers) {
-                char method[8] = {0};
-                char url[256]  = {0};
+                memcpy(headers, connection->read_buffer, header_end);
+                headers[header_end] = '\0';
 
-                char* data = (char*)connection->headers;
+                sscanf(headers, "%7s %255s", method, request_path);
 
-                // 1️⃣ Get the first word (method)
-                sscanf(data, "%7s", method);
-
-                // 2️⃣ Find and extract the Host header
-                char* host_ptr = strstr(data, "Host:");
+                char* host_ptr = strstr(headers, "Host:");
                 if (host_ptr) {
-                    sscanf(host_ptr, "Host: %255s", url);
+                    sscanf(host_ptr, "Host: %255s", host);
                 }
 
-                printf("%s\n", method);
-                printf("%s\n", url);
+                char* content_len_ptr = strstr(headers, "Content-Length:");
+                if (content_len_ptr) {
+                    sscanf(content_len_ptr, "Content-Length: %zu",
+                           &content_len);
+                }
 
-                connection->method = strdup(method);
-                connection->url    = strdup(url);
-                connection->onRequest(connection);
+                free(headers);
+
+                connection->method       = strdup(method);
+                connection->request_path = strdup(request_path);
+                connection->host         = strdup(host);
+                connection->content_len  = content_len;
+                connection->body_start   = header_end;
+
+                break;
             }
         }
+    }
+
+    //checks if headers and body is done parsing
+    if (connection->read_buffer_size >=
+            connection->body_start + connection->content_len &&
+        connection->body_start > 0) {
+
+        if (connection->method && strcmp(connection->method, "GET") == 0) {
+            connection->state = HTTP_SERVER_CONNECTION_STATE_SEND;
+            connection->onRequest(connection->context);
+            return 0;
+        }
+        connection->body = malloc(connection->content_len);
+        if (!connection->body) {
+            return -1;
+        }
+
+        memcpy(connection->body,
+               connection->read_buffer + connection->body_start,
+               connection->content_len);
+
+        connection->state = HTTP_SERVER_CONNECTION_STATE_SEND;
+        connection->onRequest(connection->context);
+    }
+
+    return 0;
+}
+
+void http_server_connection_task_work(void* context, uint64_t mon_time) {
+    HTTPServerConnection* connection = (HTTPServerConnection*)context;
+    switch (connection->state) {
+    case HTTP_SERVER_CONNECTION_STATE_RECEIVE:
+        http_server_connection_receive(connection);
+        break;
+    case HTTP_SERVER_CONNECTION_STATE_SEND:
+        http_server_connection_send(connection);
+        break;
+    case HTTP_SERVER_CONNECTION_STATE_DISPOSE:
+        http_server_connection_dispose(connection);
+        break;
     }
 }
 
 void http_server_connection_dispose(HTTPServerConnection* connection) {
+    if (!connection) {
+        return;
+    }
+
+    // Stop and remove the task first
+    if (connection->task) {
+        smw_destroy_task(connection->task);
+        connection->task = NULL;
+    }
+
     tcp_client_dispose(&connection->tcpClient);
-    smw_destroy_task(connection->task);
+
+    free(connection->read_buffer);
+    free(connection->body);
+    free(connection->method);
+    free(connection->host);
+    free(connection->request_path);
+    free(connection->write_buffer);
+
+    connection->read_buffer      = NULL;
+    connection->method           = NULL;
+    connection->host             = NULL;
+    connection->request_path     = NULL;
+    connection->write_buffer     = NULL;
+    connection->body             = NULL;
+    connection->read_buffer_size = 0;
+    connection->write_size       = 0;
+    connection->write_offset     = 0;
 }
 
 void http_server_connection_dispose_ptr(HTTPServerConnection** connection_ptr) {

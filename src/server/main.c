@@ -1,8 +1,13 @@
 #include "smw.h"
 #include "utils.h"
 #include "weather_server.h"
+#include "weather_server_instance.h"
 
-int main() {
+void test_fetch_and_parse(void);
+
+int main(void) {
+    test_fetch_and_parse();
+    
     smw_init();
 
     WeatherServer server;

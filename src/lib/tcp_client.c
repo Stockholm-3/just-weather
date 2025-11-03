@@ -77,40 +77,6 @@ int tcp_client_read(TCPClient* c, uint8_t* buf, size_t len) {
     return n;
 }
 
-// Writes all data from buf to socket
-int tcp_client_write_all(TCPClient* c, const uint8_t* buf, size_t len) {
-    int total_sent = 0;
-
-    while (total_sent < len) {
-        int n = tcp_client_write(c, buf + total_sent, len - total_sent);
-        if (n < 0) {
-            return -1;
-        }
-        total_sent += n;
-    }
-
-    return total_sent;
-}
-
-// Revives all data that can fit in the give buf
-// if messages is longer that buf the messages will be cut of
-int tcp_client_read_all(TCPClient* c, uint8_t* buf, size_t len) {
-    int total_received = 0;
-
-    while (total_received < len) {
-        int n = tcp_client_read(c, buf + total_received, len - total_received);
-        if (n < 0) {
-            return -1; // error
-        }
-        if (n == 0) {
-            break; // connection closed
-        }
-        total_received += n;
-    }
-
-    return total_received;
-}
-
 void tcp_client_disconnect(TCPClient* c) {
     if (c->fd >= 0) {
         close(c->fd);

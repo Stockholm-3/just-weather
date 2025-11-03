@@ -2,6 +2,7 @@
 #define SMW_H
 
 #include "linked_list.h"
+
 #include <stdint.h>
 
 #ifndef SMW_MAX_TASKS

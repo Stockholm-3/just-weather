@@ -22,63 +22,6 @@ It acts as a bridge between clients and [open-meteo.com](https://open-meteo.com)
 
 ---
 
-## 🧱 Architecture
-
-Client (HTTP or TCP)
-↓
-Just Weather Server
-↓
-Weather Server Instance
-↓
-Open-Meteo API
-
-
-The **Weather Server Instance** handles the actual communication with the external API and returns parsed JSON data to either HTTP or TCP clients.
-
----
-
-## 🧩 Project Structure
-
-.
-
-├── Makefile
-
-├── LICENSE
-
-├── src/
-
-│ ├── lib/
-
-│ │ ├── http_server_connection.[ch]
-
-│ │ ├── tcp_server.[ch]
-
-│ │ ├── tcp_client.[ch]
-
-│ │ ├── linked_list.[ch]
-
-│ │ ├── smw.[ch]
-
-│ │ └── utils.h
-
-│ └── server/
-
-│ ├── main.c
-
-│ ├── weather_server.[ch]
-
-│ ├── weather_server_instance.[ch]
-
-│ └── ...
-
-└── lib/
-
-└── jansson/ # JSON parsing library (linked)
-
-
-
----
-
 ## ⚙️ Requirements
 
 - Linux / WSL environment  
@@ -108,7 +51,7 @@ brew install curl
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/Stockholm-3/just-weather.git
+git clone https://github.com/stockholm-3/just-weather.git
 cd etherskies
 ```
 
@@ -116,7 +59,7 @@ cd etherskies
 
 To clone the jansson library from project root run:
 ```bash
-git clone --branch lib --single-branch https://github.com/timackevald/etherskies.git ../lib
+git clone --branch lib --single-branch https://github.com/stockholm-3/just-weather.git ../lib
 ```
 This will create a lib folder outside of the root with all library source files.
 
@@ -199,7 +142,6 @@ curl "http://localhost:8080/current?lat=59.33&lon=18.07"
   },
   "current": {
     "temperature_c": 8.5,
-    "humidity": 75,
     "wind_mps": 3.2
     "wind_deg": 133.0
   },
@@ -214,7 +156,6 @@ curl "http://localhost:8080/current?lat=59.33&lon=18.07"
 | `coords.lat`           | float     | Latitude of the requested location           |
 | `coords.lon`           | float     | Longitude of the requested location          |
 | `current.temperature_c`| float     | Current temperature in Celsius               |
-| `current.humidity`     | integer   | Current humidity percentage                  |
 | `current.wind_mps`     | float     | Current wind speed in meters per second      |
 | `current.wind_deg`     | float     | Wind direction in degrees                    |
 | `updated_at`           | string    | ISO 8601 timestamp of the last update        |

@@ -201,6 +201,7 @@ curl "http://localhost:8080/current?lat=59.33&lon=18.07"
     "temperature_c": 8.5,
     "humidity": 75,
     "wind_mps": 3.2
+    "wind_deg": 133.0
   },
   "updated_at": "2025-11-04T08:00:00Z"
 }
@@ -215,7 +216,7 @@ curl "http://localhost:8080/current?lat=59.33&lon=18.07"
 | `current.temperature_c`| float     | Current temperature in Celsius               |
 | `current.humidity`     | integer   | Current humidity percentage                  |
 | `current.wind_mps`     | float     | Current wind speed in meters per second      |
-| `current.wind_deg`     | integer   | Wind direction in degrees                    |
+| `current.wind_deg`     | float     | Wind direction in degrees                    |
 | `updated_at`           | string    | ISO 8601 timestamp of the last update        |
 
 ## Authors

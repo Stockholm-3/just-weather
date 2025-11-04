@@ -53,29 +53,20 @@ int weather_server_instance_on_request(void* context) {
     printf("content size:\n%zu\n", conn->content_len);
     printf("body:\n%s\n", conn->body);
 
-    const char* body_to_send =
-
-        //        "<html>"
-        //                               "<head><title>Weather
-        //                               Server</title></head>"
-        //                               "<body>"
-        //                               "<h1>Welcome to the Weather
-        //                               Server</h1>"
-        //                               "<p>This is a simple HTML page served
-        //                               by your " "non-blocking HTTP
-        //                               server.</p>"
-        //                               "</body>"
-        //                               "</html>";
-
-        "{\n"
-        "  \"location\": {\n"
-        "    \"latitude\": 51.5074,\n"
-        "    \"longitude\": -0.1278\n"
-        "  },\n"
-        "  \"temperature_c\": 21.3,\n"
-        "  \"humidity_percent\": 62,\n"
-        "  \"windspeed_mps\": 5.4\n"
-        "}";
+    const char* mock_json = "{\n"
+                            "  \"coords\": {\n"
+                            "    \"lat\": 59.33,\n"
+                            "    \"lon\": 18.07\n"
+                            "  },\n"
+                            "  \"current\": {\n"
+                            "    \"temperature_c\": 8.5,\n"
+                            "    \"wind_mps\": 3.2,\n"
+                            "    \"wind_deg\": 133.0,\n"
+                            "    \"elevation_m\": 45.0,\n"
+                            "    \"weather_code\": 1\n"
+                            "  },\n"
+                            "  \"updated_at\": \"2025-11-04T08:00:00Z\"\n"
+                            "}";
 
     // Construct HTTP response header
     char header[256];
@@ -84,16 +75,16 @@ int weather_server_instance_on_request(void* context) {
                                 "Content-Type: text/json\r\n"
                                 "Content-Length: %zu\r\n"
                                 "\r\n",
-                               strlen(body_to_send));
+                               strlen(mock_json));
 
-    size_t   total_len = header_len + strlen(body_to_send);
+    size_t   total_len = header_len + strlen(mock_json);
     uint8_t* response  = malloc(total_len + 1);
     if (!response) {
         perror("Out of mem");
         return -1;
     }
     memcpy(response, header, header_len);
-    strcpy((char*)response + header_len, body_to_send);
+    strcpy((char*)response + header_len, mock_json);
 
     conn->write_buffer = response;
     conn->write_size   = total_len;

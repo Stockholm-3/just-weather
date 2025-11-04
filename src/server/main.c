@@ -7,7 +7,7 @@ void test_fetch_and_parse_url(void);
 
 int main(void) {
     test_fetch_and_parse_url();
-    
+
     smw_init();
 
     WeatherServer server;

@@ -2,10 +2,11 @@
 #define WEATHER_SERVER_INSTANCE_H
 
 #include "http_server/http_server_connection.h"
-#include <jansson.h>  // include Jansson
+
+#include <jansson.h> // include Jansson
 
 struct MemoryBlock {
-    char *memory;
+    char*  memory;
     size_t size;
 };
 
@@ -13,15 +14,15 @@ typedef struct {
     double temperature;
     double windspeed;
     double winddirection;
-    double humidity;
-    int weathercode;
-    char time[64];
-    char* data;
+    double elevation;
+    int    weathercode;
+    char   time[64];
+    char*  data;
 } Meteo;
 
 typedef struct {
-    double latitude;
-    double longitude;
+    double                latitude;
+    double                longitude;
     HTTPServerConnection* connection;
 } WeatherServerInstance;
 
@@ -36,7 +37,8 @@ void weather_server_instance_dispose(WeatherServerInstance* instance);
 void weather_server_instance_dispose_ptr(WeatherServerInstance** instance_ptr);
 
 // Updated function declaration for MemoryBlock
-int get_weather_data(double latitude, double longitude, struct MemoryBlock* out);
+int get_weather_data(double latitude, double longitude,
+                     struct MemoryBlock* out);
 int parse_weather_json(const char* json_text, Meteo* meteo);
 
 #endif // WEATHER_SERVER_INSTANCE_H

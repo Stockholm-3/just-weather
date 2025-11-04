@@ -1,9 +1,10 @@
-#include <stdio.h>
+#include "open_meteo_api.h"
+#include "open_meteo_handler.h"
 #include "smw.h"
 #include "utils.h"
 #include "weather_server.h"
-#include "open_meteo_api.h"
-#include "open_meteo_handler.h"
+
+#include <stdio.h>
 
 int main() {
     smw_init();

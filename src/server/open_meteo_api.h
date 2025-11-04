@@ -3,33 +3,33 @@
 #ifndef OPEN_METEO_API_H
 #define OPEN_METEO_API_H
 
-#include <time.h>
 #include <stdbool.h>
+#include <time.h>
 
 /* Weather data structure */
 typedef struct {
-    time_t      timestamp;
-    int         weather_code;
-    
-    double      temperature;
-    char        temperature_unit[16];
-    
-    double      windspeed;
-    char        windspeed_unit[16];
-    
-    int         winddirection;
-    char        winddirection_unit[16];
-    
-    double      precipitation;
-    char        precipitation_unit[16];
-    
-    double      humidity;
-    double      pressure;
-    int         is_day;
-    
-    char        city_name[128];           /* ДОДАНО: назва міста */
-    float       latitude;                  /* ДОДАНО: координати */
-    float       longitude;                 /* ДОДАНО: координати */
+    time_t timestamp;
+    int    weather_code;
+
+    double temperature;
+    char   temperature_unit[16];
+
+    double windspeed;
+    char   windspeed_unit[16];
+
+    int  winddirection;
+    char winddirection_unit[16];
+
+    double precipitation;
+    char   precipitation_unit[16];
+
+    double humidity;
+    double pressure;
+    int    is_day;
+
+    char  city_name[128]; /* ДОДАНО: назва міста */
+    float latitude;       /* ДОДАНО: координати */
+    float longitude;      /* ДОДАНО: координати */
 } WeatherData;
 
 /* Location structure */
@@ -62,12 +62,14 @@ void open_meteo_api_cleanup(void);
 const char* open_meteo_api_get_description(int weather_code);
 
 /* Build JSON response for HTTP */
-char* open_meteo_api_build_json_response(WeatherData* data, float lat, float lon);
+char* open_meteo_api_build_json_response(WeatherData* data, float lat,
+                                         float lon);
 
 /* Parse query parameters: lat=X&long=Y or lat=X&lon=Y */
 int open_meteo_api_parse_query(const char* query, float* lat, float* lon);
 
 /* Get city name from coordinates using reverse geocoding */
-int open_meteo_api_get_city_name(float lat, float lon, char* city_name, size_t size);
+int open_meteo_api_get_city_name(float lat, float lon, char* city_name,
+                                 size_t size);
 
 #endif /* open_meteo_api_H */

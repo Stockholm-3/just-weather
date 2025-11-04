@@ -101,13 +101,9 @@ int weather_server_instance_on_request(void* context) {
     return 0;
 }
 
-/*------------------Parse v1/forecast/latitude/longitude-------------------*/
+/*---------------------------------------------------------------------------------------*/
 
-struct MemoryBlock {
-    char *memory;
-    size_t size;
-};
-
+// Callback for libcurl to write downloaded data into MemoryBlock
 static size_t write_callback(void *contents, size_t size, size_t nmemb, void *userp) {
     size_t realsize = size * nmemb;
     struct MemoryBlock *mem = (struct MemoryBlock *)userp;
@@ -126,10 +122,13 @@ static size_t write_callback(void *contents, size_t size, size_t nmemb, void *us
     return realsize;
 }
 
-int get_weather_data(double _latitude, double _longitude, char **weather_json) {
+// Download weather data from Open-Meteo into a MemoryBlock
+int get_weather_data(double _latitude, double _longitude, struct MemoryBlock *out) {
     CURL *curl;
     CURLcode res;
-    struct MemoryBlock chunk = {0};
+
+    out->memory = NULL;
+    out->size = 0;
 
     char url[256];
     snprintf(url, sizeof(url),
@@ -145,7 +144,7 @@ int get_weather_data(double _latitude, double _longitude, char **weather_json) {
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&chunk);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)out);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "weather-client/1.0");
 
     res = curl_easy_perform(curl);
@@ -153,14 +152,32 @@ int get_weather_data(double _latitude, double _longitude, char **weather_json) {
     if (res != CURLE_OK) {
         fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
         curl_easy_cleanup(curl);
-        free(chunk.memory);
+        free(out->memory);
+        out->memory = NULL;
+        out->size = 0;
         return -2;
     }
 
     curl_easy_cleanup(curl);
-
-    *weather_json = chunk.memory;
     return 0; // success
+}
+
+// --- Print JSON with indentation (uses Jansson) ---
+void print_json_formatted(const char *json_text) {
+    json_error_t error;
+    json_t *root = json_loads(json_text, 0, &error);
+    if (!root) {
+        fprintf(stderr, "Failed to parse JSON for formatted print: %s\n", error.text);
+        return;
+    }
+
+    char *formatted = json_dumps(root, JSON_INDENT(2)); // 2-space indentation
+    if (formatted) {
+        printf("%s\n", formatted);
+        free(formatted);
+    }
+
+    json_decref(root);
 }
 
 // Parse Open-Meteo JSON into Meteo struct
@@ -190,19 +207,26 @@ int parse_weather_json(const char *json_text, Meteo *meteo) {
     meteo->winddirection = json_number_value(winddirection);
     meteo->weathercode   = json_integer_value(weathercode);
     strncpy(meteo->time, json_string_value(time), sizeof(meteo->time) - 1);
+    meteo->time[sizeof(meteo->time) - 1] = '\0';
 
     json_decref(root);
     return 0;
 }
 
+// --- Test function ---
 void test_fetch_and_parse() {
-    char *json = NULL;
+    struct MemoryBlock json_data = {0};
     Meteo meteo;
 
-    if (get_weather_data(51.5074, -0.1278, &json) == 0) {
-        printf("Raw JSON downloaded:\n%s\n\n", json);
+    if (get_weather_data(51.5074, -0.1278, &json_data) == 0) {
+        // Print the size of the downloaded data
+        printf("MemoryBlock size: %zu bytes\n", json_data.size);
 
-        if (parse_weather_json(json, &meteo) == 0) {
+        printf("Raw JSON downloaded:\n");
+        print_json_formatted(json_data.memory);
+        printf("\n");
+
+        if (parse_weather_json(json_data.memory, &meteo) == 0) {
             printf("Parsed Data:\n");
             printf("Temp: %.1f°C\n", meteo.temperature);
             printf("Wind: %.1f km/h (%.0f°)\n", meteo.windspeed, meteo.winddirection);
@@ -210,7 +234,7 @@ void test_fetch_and_parse() {
             printf("Time: %s\n", meteo.time);
         }
 
-        free(json);
+        free(json_data.memory);
     } else {
         fprintf(stderr, "Failed to fetch weather data.\n");
     }

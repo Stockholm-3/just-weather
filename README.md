@@ -40,23 +40,41 @@ The **Weather Server Instance** handles the actual communication with the extern
 ## 🧩 Project Structure
 
 .
+
 ├── Makefile
+
 ├── LICENSE
+
 ├── src/
+
 │ ├── lib/
+
 │ │ ├── http_server_connection.[ch]
+
 │ │ ├── tcp_server.[ch]
+
 │ │ ├── tcp_client.[ch]
+
 │ │ ├── linked_list.[ch]
+
 │ │ ├── smw.[ch]
+
 │ │ └── utils.h
+
 │ └── server/
+
 │ ├── main.c
+
 │ ├── weather_server.[ch]
+
 │ ├── weather_server_instance.[ch]
+
 │ └── ...
+
 └── lib/
+
 └── jansson/ # JSON parsing library (linked)
+
 
 
 ---

@@ -27,9 +27,9 @@ typedef struct {
     double pressure;
     int    is_day;
 
-    char  city_name[128]; 
-    float latitude;       
-    float longitude;      
+    char  city_name[128];
+    float latitude;
+    float longitude;
 } WeatherData;
 
 /* Location structure */

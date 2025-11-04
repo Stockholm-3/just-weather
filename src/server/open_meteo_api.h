@@ -27,9 +27,9 @@ typedef struct {
     double pressure;
     int    is_day;
 
-    char  city_name[128]; /* ДОДАНО: назва міста */
-    float latitude;       /* ДОДАНО: координати */
-    float longitude;      /* ДОДАНО: координати */
+    char  city_name[128]; 
+    float latitude;       
+    float longitude;      
 } WeatherData;
 
 /* Location structure */

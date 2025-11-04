@@ -38,4 +38,4 @@ int open_meteo_handler_current(const char* query_string, char** response_json,
  */
 void open_meteo_handler_cleanup(void);
 
-#endif /* WEATHER_SERVER_H */
+#endif /* OPEN_METEO_HANDLER_H */

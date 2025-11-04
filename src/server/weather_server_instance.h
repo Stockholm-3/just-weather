@@ -13,6 +13,7 @@ typedef struct {
     double temperature;
     double windspeed;
     double winddirection;
+    double humidity;
     int weathercode;
     char time[64];
     char* data;

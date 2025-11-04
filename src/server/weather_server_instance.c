@@ -103,7 +103,13 @@ int weather_server_instance_on_request(void* context) {
 
 /*---------------------------------------------------------------------------------------*/
 
-// Callback for libcurl to write downloaded data into MemoryBlock
+// --- Struct for parsed URL parameters ---
+typedef struct {
+    double latitude;
+    double longitude;
+} WeatherParams;
+
+// --- Callback for libcurl ---
 static size_t write_callback(void *contents, size_t size, size_t nmemb, void *userp) {
     size_t realsize = size * nmemb;
     struct MemoryBlock *mem = (struct MemoryBlock *)userp;
@@ -117,23 +123,48 @@ static size_t write_callback(void *contents, size_t size, size_t nmemb, void *us
     mem->memory = ptr;
     memcpy(&(mem->memory[mem->size]), contents, realsize);
     mem->size += realsize;
-    mem->memory[mem->size] = 0;
+    mem->memory[mem->size] = 0; // null-terminate
 
     return realsize;
 }
 
-// Download weather data from Open-Meteo into a MemoryBlock
-int get_weather_data(double _latitude, double _longitude, struct MemoryBlock *out) {
+// --- Parse URL parameters ---
+int parse_url_parameters(const char *url, WeatherParams *params) {
+    const char *q = strchr(url, '?');
+    if (!q) return -1; // no query string
+    q++; // skip '?'
+
+    char *query = strdup(q);
+    if (!query) return -1;
+
+    char *pair = strtok(query, "&");
+    while (pair) {
+        char *eq = strchr(pair, '=');
+        if (eq) {
+            *eq = 0;
+            const char *key = pair;
+            const char *value = eq + 1;
+
+            if (strcmp(key, "latitude") == 0) {
+                params->latitude = atof(value);
+            } else if (strcmp(key, "longitude") == 0) {
+                params->longitude = atof(value);
+            }
+        }
+        pair = strtok(NULL, "&");
+    }
+
+    free(query);
+    return 0;
+}
+
+// --- Download weather data ---
+int get_weather_data_from_url(const char *url, struct MemoryBlock *out) {
     CURL *curl;
     CURLcode res;
 
     out->memory = NULL;
     out->size = 0;
-
-    char url[256];
-    snprintf(url, sizeof(url),
-        "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current_weather=true",
-        _latitude, _longitude);
 
     curl = curl_easy_init();
     if (!curl) {
@@ -159,84 +190,116 @@ int get_weather_data(double _latitude, double _longitude, struct MemoryBlock *ou
     }
 
     curl_easy_cleanup(curl);
-    return 0; // success
-}
 
-// --- Print JSON with indentation (uses Jansson) ---
-void print_json_formatted(const char *json_text) {
-    json_error_t error;
-    json_t *root = json_loads(json_text, 0, &error);
-    if (!root) {
-        fprintf(stderr, "Failed to parse JSON for formatted print: %s\n", error.text);
-        return;
+    if (!out->memory || out->size == 0) {
+        fprintf(stderr, "Downloaded JSON is empty\n");
+        return -3;
     }
 
-    char *formatted = json_dumps(root, JSON_INDENT(2)); // 2-space indentation
-    if (formatted) {
-        printf("%s\n", formatted);
-        free(formatted);
-    }
-
-    json_decref(root);
+    return 0;
 }
 
-// Parse Open-Meteo JSON into Meteo struct
+// --- Parse JSON into Meteo struct ---
 int parse_weather_json(const char *json_text, Meteo *meteo) {
+    if (!json_text || !*json_text) {
+        fprintf(stderr, "Empty JSON text!\n");
+        return -1;
+    }
+
     json_error_t error;
     json_t *root = json_loads(json_text, 0, &error);
     if (!root) {
         fprintf(stderr, "JSON parsing error on line %d: %s\n", error.line, error.text);
-        return -1;
+        return -2;
     }
 
     json_t *current_weather = json_object_get(root, "current_weather");
     if (!json_is_object(current_weather)) {
         fprintf(stderr, "Missing 'current_weather' object\n");
         json_decref(root);
-        return -2;
+        return -3;
     }
 
-    json_t *temperature   = json_object_get(current_weather, "temperature");
-    json_t *windspeed     = json_object_get(current_weather, "windspeed");
-    json_t *winddirection = json_object_get(current_weather, "winddirection");
-    json_t *weathercode   = json_object_get(current_weather, "weathercode");
-    json_t *time          = json_object_get(current_weather, "time");
-
-    meteo->temperature   = json_number_value(temperature);
-    meteo->windspeed     = json_number_value(windspeed);
-    meteo->winddirection = json_number_value(winddirection);
-    meteo->weathercode   = json_integer_value(weathercode);
-    strncpy(meteo->time, json_string_value(time), sizeof(meteo->time) - 1);
+    meteo->temperature   = json_number_value(json_object_get(current_weather, "temperature"));
+    meteo->windspeed     = json_number_value(json_object_get(current_weather, "windspeed"));
+    meteo->winddirection = json_number_value(json_object_get(current_weather, "winddirection"));
+    meteo->humidity      = json_number_value(json_object_get(current_weather, "humidity"));
+    meteo->weathercode   = json_integer_value(json_object_get(current_weather, "weathercode"));
+    strncpy(meteo->time, json_string_value(json_object_get(current_weather, "time")), sizeof(meteo->time) - 1);
     meteo->time[sizeof(meteo->time) - 1] = '\0';
 
     json_decref(root);
     return 0;
 }
 
+// --- Print Meteo as JSON ---
+void print_weather_as_json(double latitude, double longitude, Meteo *meteo) {
+    json_t *root = json_object();
+
+    // Coordinates
+    json_t *coords = json_object();
+    json_object_set_new(coords, "lat", json_real(latitude));
+    json_object_set_new(coords, "lon", json_real(longitude));
+    json_object_set_new(root, "coords", coords);
+
+    // Current weather
+    json_t *current = json_object();
+    json_object_set_new(current, "temperature_c", json_real(meteo->temperature));
+    json_object_set_new(current, "humidity", json_real(meteo->humidity)); // added
+    json_object_set_new(current, "wind_mps", json_real(meteo->windspeed / 3.6));
+    json_object_set_new(current, "wind_deg", json_real(meteo->winddirection));
+    json_object_set_new(root, "current", current);
+
+    // Timestamp
+    json_object_set_new(root, "updated_at", json_string(meteo->time));
+
+    char *json_str = json_dumps(root, JSON_INDENT(2));
+    if (json_str) {
+        printf("%s\n", json_str);
+        free(json_str);
+    }
+
+    json_decref(root);
+}
+
 // --- Test function ---
-void test_fetch_and_parse() {
+void test_fetch_and_parse_url() {
     struct MemoryBlock json_data = {0};
     Meteo meteo;
 
-    if (get_weather_data(51.5074, -0.1278, &json_data) == 0) {
-        // Print the size of the downloaded data
-        printf("MemoryBlock size: %zu bytes\n", json_data.size);
+    const char *url = "https://api.open-meteo.com/v1/forecast?latitude=37.7749&longitude=-122.4194&current_weather=true";
+    WeatherParams params = {0};
+    if (parse_url_parameters(url, &params) != 0) {
+        fprintf(stderr, "Failed to parse URL parameters\n");
+        return;
+    }
 
-        printf("Raw JSON downloaded:\n");
-        print_json_formatted(json_data.memory);
-        printf("\n");
+    if (get_weather_data_from_url(url, &json_data) == 0) {
+        // Temporary file
+        FILE *tmp = tmpfile();
+        if (tmp) {
+            fwrite(json_data.memory, 1, json_data.size, tmp);
+            rewind(tmp);
+            printf("Saved JSON to a temporary file\n");
+            fclose(tmp);
+        }
 
+        // Persistent file
+        FILE *json_file = fopen("weather.json", "w");
+        if (json_file) {
+            fwrite(json_data.memory, 1, json_data.size, json_file);
+            fclose(json_file);
+            printf("Saved JSON to weather.json\n");
+        }
+
+        // Parse and print structured JSON
         if (parse_weather_json(json_data.memory, &meteo) == 0) {
-            printf("Parsed Data:\n");
-            printf("Temp: %.1f°C\n", meteo.temperature);
-            printf("Wind: %.1f km/h (%.0f°)\n", meteo.windspeed, meteo.winddirection);
-            printf("Weather Code: %d\n", meteo.weathercode);
-            printf("Time: %s\n", meteo.time);
+            print_weather_as_json(params.latitude, params.longitude, &meteo);
         }
 
         free(json_data.memory);
     } else {
-        fprintf(stderr, "Failed to fetch weather data.\n");
+        fprintf(stderr, "Failed to fetch weather data\n");
     }
 }
 

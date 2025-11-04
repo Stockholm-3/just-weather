@@ -3,10 +3,10 @@
 #include "weather_server.h"
 #include "weather_server_instance.h"
 
-void test_fetch_and_parse(void);
+void test_fetch_and_parse_url(void);
 
 int main(void) {
-    test_fetch_and_parse();
+    test_fetch_and_parse_url();
     
     smw_init();
 

@@ -107,7 +107,7 @@ curl "http://localhost:8080/current?lat=59.33&lon=18.07"
 | `current.temperature_c`| float     | Current temperature in Celsius               |
 | `current.wind_mps`     | float     | Current wind speed in meters per second      |
 | `current.wind_deg`     | float     | Wind direction in degrees                    |
-| `current.elevation_m`  | float     | Wind direction in degrees                    |
+| `current.elevation_m`  | float     | Elevation over sea-level in meters           |
 | `current.weather_code` | integer   | Condition description (e.g sunny, cloudy etc)|
 | `updated_at`           | string    | ISO 8601 timestamp of the last update        |
 

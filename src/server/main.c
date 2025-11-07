@@ -2,6 +2,8 @@
 #include "utils.h"
 #include "weather_server.h"
 
+#include <stdio.h>
+
 int main() {
     smw_init();
 

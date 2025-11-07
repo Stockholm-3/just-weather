@@ -44,6 +44,7 @@ int weather_server_instance_initiate_ptr(HTTPServerConnection*   connection,
     return 0;
 }
 
+
 int weather_server_instance_on_request(void* context) {
     WeatherServerInstance* inst = (WeatherServerInstance*)context;
     HTTPServerConnection*  conn = inst->connection;
@@ -68,26 +69,40 @@ int weather_server_instance_on_request(void* context) {
                             "  \"updated_at\": \"2025-11-04T08:00:00Z\"\n"
                             "}";
 
-    // Construct HTTP response header
-    char header[256];
-    int  header_len = snprintf(header, sizeof(header),
-                               "HTTP/1.1 200 OK\r\n"
-                                "Content-Type: text/json\r\n"
-                                "Content-Length: %zu\r\n"
-                                "\r\n",
-                               strlen(mock_json));
+    size_t body_len = strlen(mock_json);
 
-    size_t   total_len = header_len + strlen(mock_json);
-    uint8_t* response  = malloc(total_len + 1);
-    if (!response) {
-        perror("Out of mem");
+    // Construct HTTP response header safely
+    char header[256];
+    int header_len = snprintf(header, sizeof(header),
+                              "HTTP/1.1 200 OK\r\n"
+                              "Content-Type: text/json\r\n"
+                              "Content-Length: %zu\r\n"
+                              "\r\n",
+                              body_len);
+
+    if (header_len < 0 || header_len >= (int)sizeof(header)) {
+        fprintf(stderr, "Header formatting error or truncation\n");
         return -1;
     }
+
+    size_t total_len = header_len + body_len;
+
+    uint8_t* response = malloc(total_len + 1); // +1 for optional null-terminator
+    if (!response) {
+        perror("Out of memory");
+        return -1;
+    }
+
+    // Copy header and body safely
     memcpy(response, header, header_len);
-    strcpy((char*)response + header_len, mock_json);
+    memcpy(response + header_len, mock_json, body_len);
+
+    // Optional null-termination
+    response[total_len] = '\0';
 
     conn->write_buffer = response;
     conn->write_size   = total_len;
+
     return 0;
 }
 

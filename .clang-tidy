@@ -3,6 +3,7 @@ Checks: >
   -*,
   bugprone-*,
   clang-analyzer-*,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
   readability-identifier-naming,
   readability-misleading-indentation,
   readability-inconsistent-declaration-parameter-name,
@@ -11,6 +12,7 @@ Checks: >
   readability-function-size,
   cppcoreguidelines-pro-type-const-cast,
   cppcoreguidelines-pro-type-reinterpret-cast,
+  readability-isolate-declaration,
 #  cppcoreguidelines-avoid-goto,
 #  cppcoreguidelines-avoid-magic-numbers
 
@@ -75,6 +77,6 @@ CheckOptions:
   - key: readability-non-const-parameter.IgnoreAllCaps
     value: 1
 
-WarningsAsErrors: ''
+WarningsAsErrors: '*'
 FormatStyle: file
-HeaderFilterRegex: '.*'
+HeaderFilterRegex: '^(src)/'

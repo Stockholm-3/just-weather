@@ -15,7 +15,8 @@ int tcp_server_initiate(TCPServer* server, const char* port,
     server->onAccept = on_accept;
     server->context  = context;
 
-    struct addrinfo hints = {0}, *res = NULL;
+    struct addrinfo hints = {0};
+    struct addrinfo *res = NULL;
     hints.ai_family   = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags    = AI_PASSIVE;

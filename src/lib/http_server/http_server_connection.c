@@ -70,7 +70,7 @@ int http_server_connection_send(HTTPServerConnection* connection) {
         return 0;
     }
 
-    ssize_t sent =
+    size_t sent =
         tcp_client_write(&connection->tcpClient,
                          connection->write_buffer + connection->write_offset,
                          connection->write_size - connection->write_offset);
@@ -100,8 +100,8 @@ int http_server_connection_receive(HTTPServerConnection* connection) {
 
     uint8_t chunk_buffer[CHUNK_SIZE];
 
-    int bytes_read = tcp_client_read(&connection->tcpClient, chunk_buffer,
-                                     sizeof(chunk_buffer));
+    size_t bytes_read = tcp_client_read(&connection->tcpClient, chunk_buffer,
+                                        sizeof(chunk_buffer));
 
     if (bytes_read < 0) {
         return -1; // real error
@@ -180,14 +180,19 @@ int http_server_connection_receive(HTTPServerConnection* connection) {
             connection->onRequest(connection->context);
             return 0;
         }
-        connection->body = malloc(connection->content_len);
-        if (!connection->body) {
-            return -1;
-        }
 
-        memcpy(connection->body,
-               connection->read_buffer + connection->body_start,
-               connection->content_len);
+        if (connection->content_len > 0) {
+            connection->body = malloc(connection->content_len);
+            if (!connection->body) {
+                return -1;
+            }
+
+            memcpy(connection->body,
+                   connection->read_buffer + connection->body_start,
+                   connection->content_len);
+        } else {
+            connection->body = NULL;
+        }
 
         connection->state = HTTP_SERVER_CONNECTION_STATE_SEND;
         connection->onRequest(connection->context);

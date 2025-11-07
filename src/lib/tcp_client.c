@@ -1,4 +1,5 @@
 #include "tcp_client.h"
+#include "sys/types.h"
 
 #include <errno.h>
 #include <stddef.h>
@@ -62,12 +63,12 @@ int tcp_client_connect(TCPClient* c, const char* host, const char* port) {
     return 0;
 }
 
-int tcp_client_write(TCPClient* c, const uint8_t* buf, size_t len) {
+ssize_t tcp_client_write(TCPClient* c, const uint8_t* buf, size_t len) {
     return send(c->fd, buf, len, MSG_NOSIGNAL);
 }
 
-int tcp_client_read(TCPClient* c, uint8_t* buf, size_t len) {
-    int n = recv(c->fd, buf, len, 0); // or MSG_DONTWAIT
+ssize_t tcp_client_read(TCPClient* c, uint8_t* buf, size_t len) {
+    ssize_t n = recv(c->fd, buf, len, 0); // or MSG_DONTWAIT
     if (n < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
             return 0; // no data available right now

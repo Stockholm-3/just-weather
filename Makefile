@@ -24,7 +24,7 @@ endif
 # ------------------------------------------------------------
 # Compiler and linker flags
 # ------------------------------------------------------------
-CFLAGS      := $(CFLAGS_BASE) -Wall -Werror -Wfatal-errors -MMD -MP \
+CFLAGS      := $(CFLAGS_BASE) -std=c99 -D_POSIX_C_SOURCE=200809L -Wall -Werror -Wfatal-errors -MMD -MP \
                -Ilib/jansson -Isrc/lib -Isrc/server -Iincludes
 
 JANSSON_CFLAGS := $(filter-out -Werror -Wfatal-errors,$(CFLAGS)) -w
@@ -63,9 +63,11 @@ all: $(BIN_SERVER) $(BIN_CLIENT)
 	@echo "Build complete. [$(BUILD_TYPE)]"
 
 $(BIN_SERVER): $(OBJ_SERVER)
+	@mkdir -p $(dir $@)
 	@$(CC) $(LDFLAGS) $(OBJ_SERVER) -o $@ $(LIBS)
 
 $(BIN_CLIENT): $(OBJ_CLIENT)
+	@mkdir -p $(dir $@)
 	@$(CC) $(LDFLAGS) $(OBJ_CLIENT) -o $@ $(LIBS)
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
@@ -154,17 +156,13 @@ format-fix:
 
 .PHONY: lint
 lint:
-	@echo "Running clang-tidy using compile_commands.json..."
-	@find src \( -name '*.c' -o -name '*.h' \) ! -path "*/jansson/*" -print0 | \
-	while IFS= read -r -d '' file; do \
-		echo "→ Linting $$file"; \
-		clang-tidy "$$file" \
-			--config-file=.clang-tidy \
-			--quiet \
-			--header-filter='^(src|includes|lib)/' \
-			--system-headers=false || true; \
-	done
-	@echo "Lint complete (see warnings above)."
+	@echo "Running clang-tidy on project code..."
+	@status=0; \
+	for file in $$(find src -type f \( -name '*.c' -o -name '*.h' \) ! -path "*/jansson/*"); do \
+	    echo "→ Linting $$file"; \
+	    clang-tidy "$$file" --config-file=.clang-tidy --quiet --header-filter='^(src|lib)/' --system-headers=false || status=1; \
+	done; \
+	exit $$status
 
 # ------------------------------------------------------------
 # GitHub Actions (act)

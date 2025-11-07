@@ -1,52 +1,37 @@
-# Etherskies
+# Just Weather
 
-> A CLI weather tool for checking current weather conditions in cities worldwide.
+> A lightweight C weather server providing a simple HTTP REST API
 
-Etherskies is a command-line weather application that fetches real-time weather data from Open-Meteo API. Built as a school project at Chas Academy (SUVX25) by Team Stockholm 1.
+Just Weather is a **network server** built as a school project at **Chas Academy (SUVX25)** by **Team Stockholm 3**.  
+It acts as a bridge between clients and [open-meteo.com](https://open-meteo.com), providing real-time weather data via a simple REST API
 
-![C](https://img.shields.io/badge/c-%2300599C.svg?style=flat&logo=c&logoColor=white)
-![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black)
-[![Check Formatting](https://github.com/timackevald/etherskies/actions/workflows/clang-format.yml/badge.svg)](https://github.com/timackevald/etherskies/actions/workflows/clang-format.yml)
+![C](https://img.shields.io/badge/C-%2300599C.svg?style=flat&logo=c&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Build](https://github.com/Stockholm-3/just-weather/actions/workflows/build.yml/badge.svg)](https://github.com/Stockholm-3/just-weather/actions/workflows/build.yml)
+[![Check Formatting](https://github.com/Stockholm-3/just-weather/actions/workflows/format-check.yml/badge.svg)](https://github.com/Stockholm-3/just-weather/actions/workflows/format-check.yml)
+
+---
 
 ## Features
 
-- **Real-time weather data** - Temperature, wind speed, and humidity
-- **Smart caching** - Data cached for 15 minutes to reduce API calls
-- **16 Swedish cities** - Pre-configured with major Swedish cities
-- **Persistent cache** - Saves city data between sessions
-- **Fast lookups** - Doubly-linked list implementation for efficient operations
+- **Live weather data** — temperature, weather conditions, and wind speed
+- **Open-Meteo integration** — no API key required
+- **C99-compatible** — portable and minimal dependencies
 
-## Prerequisites
+---
 
-Before building Etherskies, ensure you have the following installed:
+## Requirements
 
-- GCC (C99 compatible)
-- libcurl development files
-- Jansson library (linked via symlink)
-- Make
-
-### Installing Dependencies
-
-**Ubuntu/Debian:**
-```bash
-sudo apt-get install build-essential libcurl4-openssl-dev
-```
-
-**Fedora/RHEL:**
-```bash
-sudo dnf install gcc make libcurl-devel
-```
-
-**macOS:**
-```bash
-brew install curl
-```
+- Linux / WSL environment
+- GCC (C99 compliant)
+- **jansson** (included as submodule or symlink)
+- `make`
 
 ## Installation
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/timackevald/etherskies.git
+git clone https://github.com/stockholm-3/just-weather.git
 cd etherskies
 ```
 
@@ -54,12 +39,12 @@ cd etherskies
 
 To clone the jansson library from project root run:
 ```bash
-git clone --branch lib --single-branch https://github.com/timackevald/etherskies.git ../lib
+git clone --branch lib --single-branch https://github.com/stockholm-3/just-weather.git ../lib
 ```
 This will create a lib folder outside of the root with all library source files.
 
 The project uses a symlink to access the Jansson library. The symlink should point to:
-```
+```bash
 lib/jansson -> ../../lib/jansson
 ```
 More symmlinks may be added in the future.
@@ -72,132 +57,87 @@ ln -s ../../lib/jansson lib/
 
 3. Run the application:
 ```bash
-make run
+make run-server
+#or
+make run-client
 ```
 
-## Usage
-
-When you run Etherskies, you'll see a list of available cities:
-
-```
-Stockholm
-Göteborg
-Malmö
-Uppsala
-Västerås
-...
-
-Select a city: Stockholm
-
-You selected: Stockholm
-
-Current Weather for Stockholm:
-Temperature: 8.50 °C
-Wind speed: 3.20 m/s
-Humidity: 75.00 %
-```
-
-Type `q` to exit the application.
-
-## Project Structure
-
-```
-etherskies/
-├── src/
-│   ├── main.c           # Entry point
-│   └── libs/
-│       ├── city.c       # City list management & caching
-│       ├── city.h
-│       ├── HTTP.c       # Network operations & JSON parsing
-│       ├── HTTP.h
-│       ├── meteo.c      # API URL builder
-│       ├── meteo.h
-│       └── tinydir.h    # Directory traversal (header-only)
-├── lib/
-│   └── jansson/         # Symlink to external Jansson library
-├── includes/
-│   └── jansson_config.h # Jansson configuration
-├── build/               # Compiled objects and binary
-├── cities/              # Cache directory (created at runtime)
-├── Makefile
-└── README.md
-```
-
-## How It Works
-
-### Caching Strategy
-
-Etherskies implements a three-tier caching system:
-
-1. **In-memory cache** - Data stored in the linked list (fastest)
-2. **File cache** - JSON files in `./cities/` directory (persistent)
-3. **Network fetch** - Only when data is older than 15 minutes
-
-### Data Flow
-
-```
-User selects city
-    ↓
-Check in-memory data (< 15 min old?)
-    ↓ No
-Check file cache (exists & < 15 min old?)
-    ↓ No
-Fetch from Open-Meteo API
-    ↓
-Parse JSON response
-    ↓
-Update memory & save to file cache
-    ↓
-Display to user
-```
-
-### Bootstrap Cities
-
-On first run, 16 Swedish cities are automatically added:
-- Stockholm, Göteborg, Malmö, Uppsala, Västerås
-- Örebro, Linköping, Helsingborg, Jönköping, Norrköping
-- Lund, Gävle, Sundsvall, Umeå, Luleå, Kiruna
-
-## Building from Source
-
-### Build Options
-
+Binaries will be created in:
 ```bash
-make          # Build the project
-make run      # Build and run
-make clean    # Remove build artifacts
+build/<mode>/server/just-weather
+build/<mode>/client/just-weather
 ```
 
-### Compiler Flags
+## Weather API Documentation
 
-- `-std=c99` - C99 standard
-- `-Wall -Wextra` - Enable warnings
-- `-MMD -MP` - Generate dependency files
-- `-g` - Debug symbols
-
-## Dependencies
-
-### External Libraries
-
-- **libcurl** - HTTP requests
-- **Jansson** - JSON parsing (linked via symlink to external library)
-
-The Jansson library is accessed via a relative symlink at `lib/jansson`. Ensure the Jansson library is available at `../../jansson/libs/jansson` relative to your project root, or update the symlink to point to your Jansson installation.
-
-## API
-
-This project uses the [Open-Meteo API](https://open-meteo.com/), which is free and doesn't require an API key.
-
-**Example API call:**
+**Base URL:**  
 ```
-https://api.open-meteo.com/v1/forecast?latitude=59.33&longitude=18.07&current=temperature_2m,relative_humidity_2m,wind_speed_10m
+TBD
+```
+
+---
+
+### Endpoints
+
+```
+GET /current
+```
+
+**Description:**  
+Retrieves the current weather data for the specified geographic coordinates.
+
+**Query Parameters:**  
+
+| Parameter | Type   | Required | Description                        |
+|-----------|--------|----------|------------------------------------|
+| `lat`     | float  | Yes      | Latitude of the location (e.g., 59.33) |
+| `lon`     | float  | Yes      | Longitude of the location (e.g., 18.07) |
+
+**Example Request:**  
+```bash
+curl "http://localhost:8080/current?lat=59.33&lon=18.07"
+```
+
+**Response Fields:**
+
+| Field                  | Type      | Description                                    |
+|------------------------|-----------|------------------------------------------------|
+| `coords.lat`           | float     | Latitude of the requested location           |
+| `coords.lon`           | float     | Longitude of the requested location          |
+| `current.temperature_c`| float     | Current temperature in Celsius               |
+| `current.wind_mps`     | float     | Current wind speed in meters per second      |
+| `current.wind_deg`     | float     | Wind direction in degrees                    |
+| `current.elevation_m`  | float     | Elevation over sea-level in meters           |
+| `current.weather_code` | integer   | Condition description (e.g sunny, cloudy etc)|
+| `updated_at`           | string    | ISO 8601 timestamp of the last update        |
+
+**Example Response:**  
+
+- **Status Code:** `200 OK`  
+- **Content Type:** `application/json`  
+
+```json
+{
+  "coords": {
+    "lat": 59.33,
+    "lon": 18.07
+  },
+  "current": {
+    "temperature_c": 8.5,
+    "wind_mps": 3.2,
+    "wind_deg": 133.0,
+    "elevation_m": 45.0,
+    "weather_code": 1
+  },
+  "updated_at": "2025-11-04T08:00:00Z"
+}
 ```
 
 ## Authors
 
-**Team Stockholm 1**
+**Team Stockholm 3**
 - Chas Academy, SUVX25
-- 2025-09-10
+- 2025-11-04
 
 ## License
 
@@ -207,6 +147,4 @@ This project is licensed under the MIT License - see the [License](LICENSE) file
 
 - [Open-Meteo API](https://open-meteo.com/) - Free weather API
 - [Jansson](https://github.com/akheron/jansson) - JSON parsing library
-- [libcurl](https://curl.se/libcurl/) - HTTP client library
-- [tinydir](https://github.com/cxong/tinydir) - Directory traversal library
 - Chas Academy instructor and classmates

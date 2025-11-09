@@ -1,6 +1,8 @@
-/* open_meteo_api.c - Open meteo API implementation for just-weather server */
+/* open_meteo_api.c - Open-Meteo API integration with MD5 caching */
 
 #include "open_meteo_api.h"
+
+#include "hash_md5.h"
 
 #include <curl/curl.h>
 #include <jansson.h>
@@ -8,172 +10,236 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 
-/*============= Configuration =============*/
+/* ============= Configuration ============= */
 
 #define API_BASE_URL "https://api.open-meteo.com/v1/forecast"
-#define DEFAULT_CACHE_DIR "./cache/"
+#define DEFAULT_CACHE_DIR "./cache"
 #define DEFAULT_CACHE_TTL 900 /* 15 minutes */
+
+/* ============= Global State ============= */
 
 static WeatherConfig g_config = {.cache_dir = DEFAULT_CACHE_DIR,
                                  .cache_ttl = DEFAULT_CACHE_TTL,
                                  .use_cache = true};
 
-/*============= Internal structures =============*/
+/* ============= Internal Structures ============= */
 
 typedef struct {
     char*  data;
     size_t size;
-} HttpResponse;
+} MemoryChunk;
 
-typedef struct {
+/* ============= Internal Functions ============= */
+
+static size_t write_callback(void* contents, size_t size, size_t nmemb,
+                             void* userp);
+static char*  generate_cache_filepath(float lat, float lon);
+static int    is_cache_valid(const char* filepath, int ttl_seconds);
+static int    load_weather_from_cache(const char* filepath, WeatherData** data);
+static int   save_raw_json_to_cache(const char* filepath, const char* json_str);
+static int   fetch_weather_from_api(Location* location, WeatherData** data);
+static char* build_api_url(float lat, float lon);
+static int   parse_weather_json(const char* json_str, WeatherData* data,
+                                float lat, float lon);
+static const char* get_wind_direction_name(int degrees);
+
+/* ============= Weather Code Descriptions ============= */
+
+static const struct {
     int         code;
     const char* description;
-} WeatherCodeMap;
+} weather_descriptions[] = {{0, "Clear sky"},
+                            {1, "Mainly clear"},
+                            {2, "Partly cloudy"},
+                            {3, "Overcast"},
+                            {45, "Fog"},
+                            {48, "Depositing rime fog"},
+                            {51, "Light drizzle"},
+                            {53, "Moderate drizzle"},
+                            {55, "Dense drizzle"},
+                            {61, "Slight rain"},
+                            {63, "Moderate rain"},
+                            {65, "Heavy rain"},
+                            {71, "Slight snow"},
+                            {73, "Moderate snow"},
+                            {75, "Heavy snow"},
+                            {77, "Snow grains"},
+                            {80, "Slight rain showers"},
+                            {81, "Moderate rain showers"},
+                            {82, "Violent rain showers"},
+                            {85, "Slight snow showers"},
+                            {86, "Heavy snow showers"},
+                            {95, "Thunderstorm"},
+                            {96, "Thunderstorm with slight hail"},
+                            {99, "Thunderstorm with heavy hail"},
+                            {-1, "Unknown"}};
 
-/*============= Weather code descriptions =============*/
+/* ============= Wind Direction Cardinal ============= */
 
-static const WeatherCodeMap weather_codes[] = {
-    {0, "Clear sky"},
-    {1, "Mainly clear"},
-    {2, "Partly cloudy"},
-    {3, "Overcast"},
-    {45, "Fog"},
-    {48, "Depositing rime fog"},
-    {51, "Light drizzle"},
-    {53, "Moderate drizzle"},
-    {55, "Dense drizzle"},
-    {61, "Slight rain"},
-    {63, "Moderate rain"},
-    {65, "Heavy rain"},
-    {71, "Slight snow"},
-    {73, "Moderate snow"},
-    {75, "Heavy snow"},
-    {80, "Slight rain showers"},
-    {81, "Moderate rain showers"},
-    {82, "Violent rain showers"},
-    {85, "Slight snow showers"},
-    {86, "Heavy snow showers"},
-    {95, "Thunderstorm"},
-    {96, "Thunderstorm with slight hail"},
-    {99, "Thunderstorm with heavy hail"},
-    {-1, "Unknown"}};
+static const char* get_wind_direction_name(int degrees) {
+    /* Normalize to 0-360 range */
+    degrees = degrees % 360;
+    if (degrees < 0)
+        degrees += 360;
 
-/*============= Internal functions =============*/
+    /* 16-point compass rose with 22.5° per direction */
+    if (degrees >= 348.75 || degrees < 11.25)
+        return "North";
+    else if (degrees < 33.75)
+        return "North-Northeast";
+    else if (degrees < 56.25)
+        return "Northeast";
+    else if (degrees < 78.75)
+        return "East-Northeast";
+    else if (degrees < 101.25)
+        return "East";
+    else if (degrees < 123.75)
+        return "East-Southeast";
+    else if (degrees < 146.25)
+        return "Southeast";
+    else if (degrees < 168.75)
+        return " South-Southeast";
+    else if (degrees < 191.25)
+        return "South";
+    else if (degrees < 213.75)
+        return "South-Southwest";
+    else if (degrees < 236.25)
+        return "Southwest";
+    else if (degrees < 258.75)
+        return "West-Southwest";
+    else if (degrees < 281.25)
+        return "West";
+    else if (degrees < 303.75)
+        return "North-Northwest";
+    else if (degrees < 326.25)
+        return "Northwest";
+    else
+        return "North-Northwest";
+}
 
-static size_t http_write_callback(void* contents, size_t size, size_t nmemb,
-                                  void* userp);
-static int    http_get(const char* url, HttpResponse* response);
-static void   http_free(HttpResponse* response);
-static int    create_directory(const char* path);
-static bool   file_exists(const char* path);
-static void   simple_hash(const char* input, char* output);
-static int    get_cache_path(char* buffer, size_t size, const char* url);
-static bool   is_cache_valid(const char* filepath, int ttl);
-static time_t parse_iso_datetime(const char* time_str);
-static int    parse_current_weather(json_t* json, WeatherData** data);
-
-/*============= Public API Implementation =============*/
+/* ============= Public API Implementation ============= */
 
 int open_meteo_api_init(WeatherConfig* config) {
-    if (config != NULL) {
-        g_config = *config;
+    if (!config) {
+        return -1;
     }
 
-    if (g_config.use_cache) {
-        return create_directory(g_config.cache_dir);
+    /* Copy configuration */
+    g_config = *config;
+
+    /* Create cache directory if it doesn't exist */
+    struct stat st = {0};
+    if (stat(g_config.cache_dir, &st) == -1) {
+#ifdef _WIN32
+        mkdir(g_config.cache_dir);
+#else
+        mkdir(g_config.cache_dir, 0755);
+#endif
     }
+
+    /* Initialize curl globally */
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+
+    printf("[METEO] API initialized\n");
+    printf("[METEO] Cache dir: %s\n", g_config.cache_dir);
+    printf("[METEO] Cache TTL: %d seconds\n", g_config.cache_ttl);
+    printf("[METEO] Cache enabled: %s\n", g_config.use_cache ? "yes" : "no");
 
     return 0;
 }
 
 int open_meteo_api_get_current(Location* location, WeatherData** data) {
-    if (location == NULL || data == NULL) {
+    if (!location || !data) {
+        fprintf(stderr, "[METEO] Invalid parameters\n");
         return -1;
     }
 
-    /* Build URL */
-    char url[512];
-    snprintf(
-        url, sizeof(url),
-        "%s?latitude=%.4f&longitude=%.4f"
-        "&current=temperature_2m,relative_humidity_2m,apparent_temperature,"
-        "is_day,precipitation,rain,weather_code,pressure_msl,"
-        "wind_speed_10m,wind_direction_10m"
-        "&timezone=GMT",
-        API_BASE_URL, location->latitude, location->longitude);
+    /* Generate cache filepath using MD5 */
+    char* cache_file =
+        generate_cache_filepath(location->latitude, location->longitude);
+    if (!cache_file) {
+        fprintf(stderr, "[METEO] Failed to generate cache filepath\n");
+        return -2;
+    }
 
-    /* Check cache */
-    char         cache_path[512];
-    HttpResponse response = {0};
-    json_error_t error;
-    json_t*      json = NULL;
+    printf("[METEO] Cache file: %s\n", cache_file);
 
-    if (g_config.use_cache) {
-        get_cache_path(cache_path, sizeof(cache_path), url);
+    /* Check cache validity */
+    if (g_config.use_cache && is_cache_valid(cache_file, g_config.cache_ttl)) {
+        printf("[METEO] Cache HIT - loading from file\n");
 
-        if (is_cache_valid(cache_path, g_config.cache_ttl)) {
-            json = json_load_file(cache_path, 0, &error);
-            if (json != NULL) {
-                int result = parse_current_weather(json, data);
-                json_decref(json);
-                return result;
-            }
+        int result = load_weather_from_cache(cache_file, data);
+        free(cache_file);
+
+        if (result == 0) {
+            return 0; /* Success - loaded from cache */
+        }
+
+        fprintf(stderr, "[METEO] Cache load failed, fetching from API\n");
+    } else {
+        if (g_config.use_cache) {
+            printf("[METEO] Cache MISS - fetching from API\n");
+        } else {
+            printf("[METEO] Cache disabled - fetching from API\n");
         }
     }
 
     /* Fetch from API */
-    if (http_get(url, &response) != 0) {
-        return -2;
-    }
+    int result = fetch_weather_from_api(location, data);
 
-    /* Parse JSON */
-    json = json_loadb(response.data, response.size, 0, &error);
-    http_free(&response);
-
-    if (json == NULL) {
-        fprintf(stderr, "JSON parse error: %s\n", error.text);
+    if (result != 0) {
+        fprintf(stderr, "[METEO] API fetch failed\n");
+        free(cache_file);
         return -3;
     }
 
-    /* Save to cache */
-    if (g_config.use_cache) {
-        json_dump_file(json, cache_path, JSON_INDENT(2));
+    /* Save RAW JSON to cache (preserves original API structure) */
+    if (g_config.use_cache && (*data)->_raw_json_cache) {
+        if (save_raw_json_to_cache(cache_file, (*data)->_raw_json_cache) == 0) {
+            printf("[METEO] Saved to cache\n");
+        } else {
+            fprintf(stderr, "[METEO] Failed to save cache\n");
+        }
+
+        /* Free the raw JSON after saving */
+        free((*data)->_raw_json_cache);
+        (*data)->_raw_json_cache = NULL;
     }
 
-    /* Parse weather data */
-    int result = parse_current_weather(json, data);
-    json_decref(json);
-
-    if (result == 0 && *data) {
-        /* Get city name from coordinates */
-        open_meteo_api_get_city_name(location->latitude, location->longitude,
-                                     (*data)->city_name,
-                                     sizeof((*data)->city_name));
-
-        /* Store coordinates */
-        (*data)->latitude  = location->latitude;
-        (*data)->longitude = location->longitude;
-    }
-
-    return result;
+    free(cache_file);
+    return 0;
 }
 
 void open_meteo_api_free_current(WeatherData* data) {
-    if (data != NULL) {
+    if (data) {
+        /* Free raw JSON cache if it exists */
+        if (data->_raw_json_cache) {
+            free(data->_raw_json_cache);
+            data->_raw_json_cache = NULL;
+        }
         free(data);
     }
 }
 
-void open_meteo_api_cleanup(void) { /* Cleanup if needed */ }
+void open_meteo_api_cleanup(void) {
+    curl_global_cleanup();
+    printf("[METEO] API cleaned up\n");
+}
 
 const char* open_meteo_api_get_description(int weather_code) {
-    for (int i = 0; weather_codes[i].code != -1; i++) {
-        if (weather_codes[i].code == weather_code) {
-            return weather_codes[i].description;
+    for (size_t i = 0;
+         i < sizeof(weather_descriptions) / sizeof(weather_descriptions[0]) - 1;
+         i++) {
+        if (weather_descriptions[i].code == weather_code) {
+            return weather_descriptions[i].description;
         }
     }
-    return "Unknown";
+    return weather_descriptions[sizeof(weather_descriptions) /
+                                    sizeof(weather_descriptions[0]) -
+                                1]
+        .description;
 }
 
 char* open_meteo_api_build_json_response(WeatherData* data, float lat,
@@ -182,58 +248,53 @@ char* open_meteo_api_build_json_response(WeatherData* data, float lat,
         return NULL;
     }
 
-    char time_str[32];
-    strftime(time_str, sizeof(time_str), "%Y-%m-%dT%H:%M:%S",
-             gmtime(&data->timestamp));
-
-    /* Allocate buffer for JSON */
-    char* json = malloc(2048);
-    if (!json) {
+    /* Generate cache filepath to load raw JSON */
+    char* cache_file = generate_cache_filepath(lat, lon);
+    if (!cache_file) {
+        fprintf(stderr, "[METEO] Failed to generate cache filepath\n");
         return NULL;
     }
 
-    snprintf(
-        json, 2048,
-        "{\n"
-        "  \"latitude\": %.4f,\n"
-        "  \"longitude\": %.4f,\n"
-        "  \"timezone\": \"GMT\",\n"
-        "  \"current\": {\n"
-        "    \"time\": \"%s\",\n"
-        "    \"temperature_2m\": %.1f,\n"
-        "    \"relative_humidity_2m\": %.0f,\n"
-        "    \"wind_speed_10m\": %.1f,\n"
-        "    \"wind_direction_10m\": %d,\n"
-        "    \"weather_code\": %d,\n"
-        "    \"weather_description\": \"%s\"\n"
-        "    \"precipitation\": %.1f,\n"
-        "    \"pressure_msl\": %.0f,\n"
-        "    \"is_day\": %d\n"
-        "  },\n"
-        "  \"current_units\": {\n"
-        "    \"time\": \"iso8601\",\n"
-        "    \"temperature_2m\": \"%s\",\n"
-        "    \"relative_humidity_2m\": \"%%\",\n"
-        "    \"wind_speed_10m\": \"%s\",\n"
-        "    \"wind_direction_10m\": \"%s\",\n"
-        "    \"weather_code\": \"wmo code\",\n"
-        "    \"precipitation\": \"%s\",\n"
-        "    \"pressure_msl\": \"hPa\",\n"
-        "    \"is_day\": \"\"\n"
-        "  },\n"
-        "}",
-        lat, lon, time_str, data->temperature, data->humidity, data->windspeed,
-        data->winddirection, data->weather_code,
-        open_meteo_api_get_description(data->weather_code), data->precipitation,
-        data->pressure, data->is_day,
-        data->temperature_unit[0] != '\0' ? data->temperature_unit : "°C",
-        data->windspeed_unit[0] != '\0' ? data->windspeed_unit : "km/h",
-        data->winddirection_unit[0] != '\0' ? data->winddirection_unit : "°",
-        data->precipitation_unit[0] != '\0' ? data->precipitation_unit : "mm"
+    /* Load raw JSON from cache file */
+    json_error_t error;
+    json_t*      root = json_load_file(cache_file, 0, &error);
+    free(cache_file);
 
-    );
+    if (!root) {
+        fprintf(stderr, "[METEO] Failed to load raw JSON from cache: %s\n",
+                error.text);
+        return NULL;
+    }
 
-    return json;
+    /* Add helpful descriptions to the JSON */
+    json_t* current = json_object_get(root, "current");
+    if (current) {
+        /* Add weather code description */
+        json_t* weather_code = json_object_get(current, "weather_code");
+        if (weather_code && json_is_integer(weather_code)) {
+            int         code        = json_integer_value(weather_code);
+            const char* description = open_meteo_api_get_description(code);
+            json_object_set_new(current, "weather_description",
+                                json_string(description));
+        }
+
+        /* Add wind direction name */
+        json_t* wind_direction = json_object_get(current, "wind_direction_10m");
+        if (wind_direction && json_is_integer(wind_direction)) {
+            int         degrees        = json_integer_value(wind_direction);
+            const char* direction_name = get_wind_direction_name(degrees);
+            json_object_set_new(current, "wind_direction_name",
+                                json_string(direction_name));
+        }
+    }
+
+    /* Convert JSON object to formatted string */
+    char* json_str = json_dumps(root, JSON_INDENT(2) | JSON_PRESERVE_ORDER);
+
+    /* Cleanup */
+    json_decref(root);
+
+    return json_str;
 }
 
 int open_meteo_api_parse_query(const char* query, float* lat, float* lon) {
@@ -241,46 +302,35 @@ int open_meteo_api_parse_query(const char* query, float* lat, float* lon) {
         return -1;
     }
 
-    *lat = 0.0f;
-    *lon = 0.0f;
-
-    /* Parse format: "lat=37.7749&long=-122.4194" or "lat=37.7749&lon=-122.4194"
-     */
-    char* query_copy = strdup(query);
-    if (!query_copy) {
-        return -1;
-    }
+    /* Parse query string: lat=X&lon=Y or lat=X&long=Y */
+    char query_copy[512];
+    strncpy(query_copy, query, sizeof(query_copy) - 1);
+    query_copy[sizeof(query_copy) - 1] = '\0';
 
     char* token     = strtok(query_copy, "&");
-    int   lat_found = 0, lon_found = 0;
+    int   found_lat = 0, found_lon = 0;
 
     while (token != NULL) {
         if (strncmp(token, "lat=", 4) == 0) {
             *lat      = atof(token + 4);
-            lat_found = 1;
-        } else if (strncmp(token, "long=", 5) == 0 ||
-                   strncmp(token, "lon=", 4) == 0) {
-            *lon      = atof(token + (strncmp(token, "long=", 5) == 0 ? 5 : 4));
-            lon_found = 1;
+            found_lat = 1;
+        } else if (strncmp(token, "lon=", 4) == 0 ||
+                   strncmp(token, "long=", 5) == 0) {
+            char* value = strchr(token, '=');
+            if (value) {
+                *lon      = atof(value + 1);
+                found_lon = 1;
+            }
         }
         token = strtok(NULL, "&");
     }
 
-    free(query_copy);
-
-    if (!lat_found || !lon_found) {
-        return -1;
+    if (found_lat && found_lon) {
+        return 0;
     }
 
-    /* Validate ranges */
-    if (*lat < -90.0f || *lat > 90.0f || *lon < -180.0f || *lon > 180.0f) {
-        return -1;
-    }
-
-    return 0;
+    return -1;
 }
-
-/*============= Reverse Geocoding =============*/
 
 int open_meteo_api_get_city_name(float lat, float lon, char* city_name,
                                  size_t size) {
@@ -288,303 +338,415 @@ int open_meteo_api_get_city_name(float lat, float lon, char* city_name,
         return -1;
     }
 
-    /* Build geocoding URL */
-    char url[512];
-    snprintf(url, sizeof(url),
-             "https://geocoding-api.open-meteo.com/v1/"
-             "reverse?latitude=%.4f&longitude=%.4f&count=1",
-             lat, lon);
+    /* For now, just use coordinates as name */
+    /* In production, you'd use reverse geocoding API */
+    snprintf(city_name, size, "Location (%.4f, %.4f)", lat, lon);
 
-    /* Fetch from geocoding API */
-    HttpResponse response = {0};
-    if (http_get(url, &response) != 0) {
-        /* Fallback to coordinates */
-        snprintf(city_name, size, "%.4f, %.4f", lat, lon);
-        return 1;
-    }
-
-    /* Parse JSON */
-    json_error_t error;
-    json_t*      json = json_loadb(response.data, response.size, 0, &error);
-    http_free(&response);
-
-    if (json == NULL) {
-        snprintf(city_name, size, "%.4f, %.4f", lat, lon);
-        return 1;
-    }
-
-    /* Extract city name */
-    json_t* results = json_object_get(json, "results");
-    if (json_is_array(results) && json_array_size(results) > 0) {
-        json_t* first_result = json_array_get(results, 0);
-
-        /* Try to get name */
-        json_t* name = json_object_get(first_result, "name");
-        if (json_is_string(name)) {
-            strncpy(city_name, json_string_value(name), size - 1);
-            city_name[size - 1] = '\0';
-            json_decref(json);
-            return 0;
-        }
-
-        /* Try admin1 (region) */
-        json_t* admin1 = json_object_get(first_result, "admin1");
-        if (json_is_string(admin1)) {
-            strncpy(city_name, json_string_value(admin1), size - 1);
-            city_name[size - 1] = '\0';
-            json_decref(json);
-            return 0;
-        }
-    }
-
-    json_decref(json);
-
-    /* Fallback */
-    snprintf(city_name, size, "%.4f, %.4f", lat, lon);
-    return 1;
+    return 0;
 }
 
-/*============= HTTP functions =============*/
+/* ============= Internal Functions Implementation ============= */
 
-/* ВИПРАВЛЕНО: змінено тип userp з HttpResponse* на void* */
-static size_t http_write_callback(void* contents, size_t size, size_t nmemb,
-                                  void* userp) {
-    size_t        realsize = size * nmemb;
-    HttpResponse* response =
-        (HttpResponse*)userp; /* Cast до правильного типу */
+/**
+ * CURL write callback for receiving data
+ */
+static size_t write_callback(void* contents, size_t size, size_t nmemb,
+                             void* userp) {
+    size_t       realsize = size * nmemb;
+    MemoryChunk* mem      = (MemoryChunk*)userp;
 
-    char* ptr = realloc(response->data, response->size + realsize + 1);
-
-    if (ptr == NULL) {
+    char* ptr = realloc(mem->data, mem->size + realsize + 1);
+    if (!ptr) {
+        fprintf(stderr, "[METEO] Out of memory\n");
         return 0;
     }
 
-    response->data = ptr;
-    memcpy(&(response->data[response->size]), contents, realsize);
-    response->size += realsize;
-    response->data[response->size] = 0;
+    mem->data = ptr;
+    memcpy(&(mem->data[mem->size]), contents, realsize);
+    mem->size += realsize;
+    mem->data[mem->size] = 0;
 
     return realsize;
 }
 
-static int http_get(const char* url, HttpResponse* response) {
-    CURL* curl = curl_easy_init();
-    if (!curl) {
-        return -1;
+/**
+ * Generate cache filepath using MD5 hash of coordinates
+ * Caller must free the returned string
+ */
+static char* generate_cache_filepath(float lat, float lon) {
+    /* Create unique key from coordinates */
+    char cache_key[256];
+    int  key_len =
+        snprintf(cache_key, sizeof(cache_key), "weather_%.6f_%.6f", lat, lon);
+
+    if (key_len < 0 || key_len >= (int)sizeof(cache_key)) {
+        fprintf(stderr, "[METEO] Failed to create cache key\n");
+        return NULL;
     }
 
-    response->data = NULL;
-    response->size = 0;
-
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, http_write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)response);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "just-weather/1.0");
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
-
-    CURLcode res = curl_easy_perform(curl);
-
-    if (res != CURLE_OK) {
-        fprintf(stderr, "curl_easy_perform() failed: %s\n",
-                curl_easy_strerror(res));
-        curl_easy_cleanup(curl);
-        http_free(response);
-        return -1;
+    /* Calculate MD5 hash */
+    char hash[HASH_MD5_STRING_LENGTH];
+    if (hash_md5_string(cache_key, strlen(cache_key), hash, sizeof(hash)) !=
+        0) {
+        fprintf(stderr, "[METEO] Failed to calculate MD5 hash\n");
+        return NULL;
     }
 
-    long http_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    curl_easy_cleanup(curl);
-
-    if (http_code != 200) {
-        http_free(response);
-        return -1;
+    /* Build full filepath: cache_dir/hash.json */
+    char* filepath = malloc(512);
+    if (!filepath) {
+        fprintf(stderr, "[METEO] Failed to allocate memory for filepath\n");
+        return NULL;
     }
 
-    return 0;
+    snprintf(filepath, 512, "%s/%s.json", g_config.cache_dir, hash);
+
+    return filepath;
 }
 
-static void http_free(HttpResponse* response) {
-    if (response && response->data) {
-        free(response->data);
-        response->data = NULL;
-        response->size = 0;
-    }
-}
-
-/*============= File system functions =============*/
-
-static int create_directory(const char* path) {
-#ifdef _WIN32
-    return _mkdir(path);
-#else
-    struct stat st = {0};
-    if (stat(path, &st) == -1) {
-        return mkdir(path, 0755);
-    }
-    return 0;
-#endif
-}
-
-static bool file_exists(const char* path) {
-    struct stat buffer;
-    return (stat(path, &buffer) == 0);
-}
-
-static void simple_hash(const char* input, char* output) {
-    unsigned long hash = 5381;
-    int           c;
-    const char*   str = input;
-
-    while ((c = *str++)) {
-        hash = ((hash << 5) + hash) + c;
-    }
-
-    sprintf(output, "%016lx", hash);
-}
-
-static int get_cache_path(char* buffer, size_t size, const char* url) {
-    char hash[33];
-    simple_hash(url, hash);
-    snprintf(buffer, size, "%s%s.json", g_config.cache_dir, hash);
-    return 0;
-}
-
-static bool is_cache_valid(const char* filepath, int ttl) {
-    if (!file_exists(filepath)) {
-        return false;
-    }
-
+/**
+ * Check if cache file exists and is not expired
+ */
+static int is_cache_valid(const char* filepath, int ttl_seconds) {
     struct stat file_stat;
+
+    /* Check if file exists */
     if (stat(filepath, &file_stat) != 0) {
-        return false;
+        return 0; /* File doesn't exist */
     }
 
+    /* Check if file is recent enough */
     time_t now = time(NULL);
     double age = difftime(now, file_stat.st_mtime);
 
-    return age < ttl;
-}
-
-/*============= JSON Parsing =============*/
-
-static time_t parse_iso_datetime(const char* time_str) {
-    struct tm tm = {0};
-    int       year, month, day, hour, min;
-
-    if (sscanf(time_str, "%4d-%2d-%2dT%2d:%2d", &year, &month, &day, &hour,
-               &min) != 5) {
-        return (time_t)-1;
+    if (age > ttl_seconds) {
+        return 0; /* Cache expired */
     }
 
-    tm.tm_year  = year - 1900;
-    tm.tm_mon   = month - 1;
-    tm.tm_mday  = day;
-    tm.tm_hour  = hour;
-    tm.tm_min   = min;
-    tm.tm_isdst = -1;
-
-#ifdef _WIN32
-    return _mkgmtime(&tm);
-#else
-    return timegm(&tm);
-#endif
+    return 1; /* Cache is valid */
 }
 
-static int parse_current_weather(json_t* json, WeatherData** data) {
-    json_t* current = json_object_get(json, "current");
-    json_t* units   = json_object_get(json, "current_units");
+/**
+ * Load weather data from cache file
+ */
+static int load_weather_from_cache(const char* filepath, WeatherData** data) {
+    json_error_t error;
+    json_t*      root = json_load_file(filepath, 0, &error);
 
-    if (!current || !units) {
+    if (!root) {
+        fprintf(stderr, "[METEO] Failed to load cache: %s\n", error.text);
         return -1;
     }
 
+    /* Allocate weather data */
     *data = (WeatherData*)calloc(1, sizeof(WeatherData));
-    if (*data == NULL) {
+    if (!*data) {
+        json_decref(root);
         return -2;
     }
 
-    /* Parse timestamp */
-    json_t* time_json = json_object_get(current, "time");
-    if (json_is_string(time_json)) {
-        (*data)->timestamp = parse_iso_datetime(json_string_value(time_json));
+    /* Get current weather and units from Open-Meteo API format */
+    json_t* current       = json_object_get(root, "current");
+    json_t* current_units = json_object_get(root, "current_units");
+
+    if (!current || !current_units) {
+        fprintf(stderr,
+                "[METEO] Cache file missing 'current' or 'current_units'\n");
+        json_decref(root);
+        free(*data);
+        return -3;
     }
 
-    /* Parse weather code */
-    json_t* code = json_object_get(current, "weather_code");
-    if (json_is_integer(code)) {
-        (*data)->weather_code = json_integer_value(code);
-    }
+    /* Extract values from API format */
+    json_t* temp           = json_object_get(current, "temperature_2m");
+    json_t* temp_unit      = json_object_get(current_units, "temperature_2m");
+    json_t* windspeed      = json_object_get(current, "wind_speed_10m");
+    json_t* windspeed_unit = json_object_get(current_units, "wind_speed_10m");
+    json_t* winddirection  = json_object_get(current, "wind_direction_10m");
+    json_t* winddirection_unit =
+        json_object_get(current_units, "wind_direction_10m");
+    json_t* precipitation = json_object_get(current, "precipitation");
+    json_t* precipitation_unit =
+        json_object_get(current_units, "precipitation");
+    json_t* humidity     = json_object_get(current, "relative_humidity_2m");
+    json_t* pressure     = json_object_get(current, "surface_pressure");
+    json_t* weather_code = json_object_get(current, "weather_code");
+    json_t* is_day       = json_object_get(current, "is_day");
+    json_t* time_str     = json_object_get(current, "time");
 
-    /* Parse temperature */
-    json_t* temp      = json_object_get(current, "temperature_2m");
-    json_t* temp_unit = json_object_get(units, "temperature_2m");
-    if (json_is_number(temp)) {
-        (*data)->temperature = json_number_value(temp);
-    }
-    if (json_is_string(temp_unit)) {
+    /* Copy values */
+    if (temp)
+        (*data)->temperature = json_real_value(temp);
+    if (temp_unit)
         strncpy((*data)->temperature_unit, json_string_value(temp_unit),
                 sizeof((*data)->temperature_unit) - 1);
-        (*data)->temperature_unit[sizeof((*data)->temperature_unit) - 1] = '\0';
-    }
-
-    /* Parse wind speed */
-    json_t* wind      = json_object_get(current, "wind_speed_10m");
-    json_t* wind_unit = json_object_get(units, "wind_speed_10m");
-    if (json_is_number(wind)) {
-        (*data)->windspeed = json_number_value(wind);
-    }
-    if (json_is_string(wind_unit)) {
-        strncpy((*data)->windspeed_unit, json_string_value(wind_unit),
+    if (windspeed)
+        (*data)->windspeed = json_real_value(windspeed);
+    if (windspeed_unit)
+        strncpy((*data)->windspeed_unit, json_string_value(windspeed_unit),
                 sizeof((*data)->windspeed_unit) - 1);
-        (*data)->windspeed_unit[sizeof((*data)->windspeed_unit) - 1] = '\0';
-    }
-
-    /* Parse wind direction */
-    json_t* wind_dir      = json_object_get(current, "wind_direction_10m");
-    json_t* wind_dir_unit = json_object_get(units, "wind_direction_10m");
-    if (json_is_number(wind_dir)) {
-        (*data)->winddirection = json_number_value(wind_dir);
-    }
-    if (json_is_string(wind_dir_unit)) {
-        strncpy((*data)->winddirection_unit, json_string_value(wind_dir_unit),
+    if (winddirection)
+        (*data)->winddirection = json_integer_value(winddirection);
+    if (winddirection_unit)
+        strncpy((*data)->winddirection_unit,
+                json_string_value(winddirection_unit),
                 sizeof((*data)->winddirection_unit) - 1);
-        (*data)->winddirection_unit[sizeof((*data)->winddirection_unit) - 1] =
-            '\0';
-    }
-
-    /* Parse precipitation */
-    json_t* precip      = json_object_get(current, "precipitation");
-    json_t* precip_unit = json_object_get(units, "precipitation");
-    if (json_is_number(precip)) {
-        (*data)->precipitation = json_number_value(precip);
-    }
-    if (json_is_string(precip_unit)) {
-        strncpy((*data)->precipitation_unit, json_string_value(precip_unit),
+    if (precipitation)
+        (*data)->precipitation = json_real_value(precipitation);
+    if (precipitation_unit)
+        strncpy((*data)->precipitation_unit,
+                json_string_value(precipitation_unit),
                 sizeof((*data)->precipitation_unit) - 1);
-        (*data)->precipitation_unit[sizeof((*data)->precipitation_unit) - 1] =
-            '\0';
-    }
-
-    /* Parse humidity */
-    json_t* humidity = json_object_get(current, "relative_humidity_2m");
-    if (json_is_number(humidity)) {
-        (*data)->humidity = json_number_value(humidity);
-    }
-
-    /* Parse pressure */
-    json_t* pressure = json_object_get(current, "pressure_msl");
-    if (json_is_number(pressure)) {
-        (*data)->pressure = json_number_value(pressure);
-    }
-
-    /* Parse is_day */
-    json_t* is_day = json_object_get(current, "is_day");
-    if (json_is_integer(is_day)) {
+    if (humidity)
+        (*data)->humidity = json_real_value(humidity);
+    if (pressure)
+        (*data)->pressure = json_real_value(pressure);
+    if (weather_code)
+        (*data)->weather_code = json_integer_value(weather_code);
+    if (is_day)
         (*data)->is_day = json_integer_value(is_day);
+
+    /* Parse timestamp */
+    if (time_str) {
+        /* For now, use current time - could parse ISO string if needed */
+        (*data)->timestamp = time(NULL);
     }
 
+    /* Get location from API response */
+    json_t* latitude  = json_object_get(root, "latitude");
+    json_t* longitude = json_object_get(root, "longitude");
+
+    if (latitude)
+        (*data)->latitude = json_real_value(latitude);
+    if (longitude)
+        (*data)->longitude = json_real_value(longitude);
+
+    /* Get city name based on coordinates */
+    open_meteo_api_get_city_name((*data)->latitude, (*data)->longitude,
+                                 (*data)->city_name,
+                                 sizeof((*data)->city_name));
+
+    json_decref(root);
+    return 0;
+}
+
+/**
+ * Save raw JSON response from API to cache file
+ * This preserves the original API structure (current/current_units or
+ * hourly/hourly_units)
+ */
+static int save_raw_json_to_cache(const char* filepath, const char* json_str) {
+    if (!filepath || !json_str) {
+        return -1;
+    }
+
+    /* Parse JSON to validate and format it */
+    json_error_t error;
+    json_t*      json = json_loadb(json_str, strlen(json_str), 0, &error);
+    if (json == NULL) {
+        fprintf(stderr, "[METEO] Invalid JSON to cache: %s\n", error.text);
+        return -2;
+    }
+
+    /* Save with proper formatting (2-space indent, preserve order) */
+    if (json_dump_file(json, filepath, JSON_INDENT(2) | JSON_PRESERVE_ORDER) !=
+        0) {
+        fprintf(stderr, "[METEO] Failed to save JSON to file: %s\n", filepath);
+        json_decref(json);
+        return -3;
+    }
+
+    json_decref(json);
+    return 0;
+}
+
+/**
+ * Build API URL with parameters
+ */
+static char* build_api_url(float lat, float lon) {
+    char* url = malloc(1024);
+    if (!url) {
+        return NULL;
+    }
+
+    snprintf(url, 1024,
+             "%s?latitude=%.6f&longitude=%.6f"
+             "&current=temperature_2m,relative_humidity_2m,"
+             "apparent_temperature,is_day,precipitation,weather_code,"
+             "surface_pressure,wind_speed_10m,wind_direction_10m"
+             "&timezone=GMT",
+             API_BASE_URL, lat, lon);
+
+    return url;
+}
+
+/**
+ * Parse weather JSON from API response
+ */
+static int parse_weather_json(const char* json_str, WeatherData* data,
+                              float lat, float lon) {
+    json_error_t error;
+    json_t*      root = json_loadb(json_str, strlen(json_str), 0, &error);
+
+    if (!root) {
+        fprintf(stderr, "[METEO] JSON parse error: %s\n", error.text);
+        return -1;
+    }
+
+    /* Get current weather */
+    json_t* current       = json_object_get(root, "current");
+    json_t* current_units = json_object_get(root, "current_units");
+
+    if (!current || !current_units) {
+        json_decref(root);
+        return -2;
+    }
+
+    /* Extract values */
+    json_t* temp           = json_object_get(current, "temperature_2m");
+    json_t* temp_unit      = json_object_get(current_units, "temperature_2m");
+    json_t* windspeed      = json_object_get(current, "wind_speed_10m");
+    json_t* windspeed_unit = json_object_get(current_units, "wind_speed_10m");
+    json_t* winddirection  = json_object_get(current, "wind_direction_10m");
+    json_t* winddirection_unit =
+        json_object_get(current_units, "wind_direction_10m");
+    json_t* precipitation = json_object_get(current, "precipitation");
+    json_t* precipitation_unit =
+        json_object_get(current_units, "precipitation");
+    json_t* humidity     = json_object_get(current, "relative_humidity_2m");
+    json_t* pressure     = json_object_get(current, "surface_pressure");
+    json_t* weather_code = json_object_get(current, "weather_code");
+    json_t* is_day       = json_object_get(current, "is_day");
+    json_t* time_str     = json_object_get(current, "time");
+
+    /* Copy values */
+    if (temp)
+        data->temperature = json_real_value(temp);
+    if (temp_unit)
+        strncpy(data->temperature_unit, json_string_value(temp_unit),
+                sizeof(data->temperature_unit) - 1);
+    if (windspeed)
+        data->windspeed = json_real_value(windspeed);
+    if (windspeed_unit)
+        strncpy(data->windspeed_unit, json_string_value(windspeed_unit),
+                sizeof(data->windspeed_unit) - 1);
+    if (winddirection)
+        data->winddirection = json_integer_value(winddirection);
+    if (winddirection_unit)
+        strncpy(data->winddirection_unit, json_string_value(winddirection_unit),
+                sizeof(data->winddirection_unit) - 1);
+    if (precipitation)
+        data->precipitation = json_real_value(precipitation);
+    if (precipitation_unit)
+        strncpy(data->precipitation_unit, json_string_value(precipitation_unit),
+                sizeof(data->precipitation_unit) - 1);
+    if (humidity)
+        data->humidity = json_real_value(humidity);
+    if (pressure)
+        data->pressure = json_real_value(pressure);
+    if (weather_code)
+        data->weather_code = json_integer_value(weather_code);
+    if (is_day)
+        data->is_day = json_integer_value(is_day);
+
+    /* Parse timestamp (convert ISO string to Unix timestamp) */
+    if (time_str) {
+        /* For simplicity, use current time */
+        data->timestamp = time(NULL);
+    }
+
+    /* Set location */
+    data->latitude  = lat;
+    data->longitude = lon;
+    open_meteo_api_get_city_name(lat, lon, data->city_name,
+                                 sizeof(data->city_name));
+
+    json_decref(root);
+    return 0;
+}
+
+/**
+ * Fetch weather data from Open-Meteo API
+ */
+static int fetch_weather_from_api(Location* location, WeatherData** data) {
+    CURL*       curl;
+    CURLcode    res;
+    MemoryChunk chunk = {0};
+
+    /* Build API URL */
+    char* url = build_api_url(location->latitude, location->longitude);
+    if (!url) {
+        return -1;
+    }
+
+    printf("[METEO] Fetching: %s\n", url);
+
+    /* Initialize curl */
+    curl = curl_easy_init();
+    if (!curl) {
+        free(url);
+        return -2;
+    }
+
+    /* Set curl options */
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)&chunk);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "weatherio/1.0");
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+
+    /* Perform request */
+    res = curl_easy_perform(curl);
+
+    if (res != CURLE_OK) {
+        fprintf(stderr, "[METEO] CURL error: %s\n", curl_easy_strerror(res));
+        curl_easy_cleanup(curl);
+        free(url);
+        if (chunk.data)
+            free(chunk.data);
+        return -3;
+    }
+
+    /* Check HTTP status */
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    if (http_code != 200) {
+        fprintf(stderr, "[METEO] HTTP error: %ld\n", http_code);
+        curl_easy_cleanup(curl);
+        free(url);
+        if (chunk.data)
+            free(chunk.data);
+        return -4;
+    }
+
+    curl_easy_cleanup(curl);
+    free(url);
+
+    /* Allocate weather data */
+    *data = (WeatherData*)calloc(1, sizeof(WeatherData));
+    if (!*data) {
+        if (chunk.data)
+            free(chunk.data);
+        return -5;
+    }
+
+    /* Parse JSON */
+    int result = parse_weather_json(chunk.data, *data, location->latitude,
+                                    location->longitude);
+
+    if (result != 0) {
+        if (chunk.data)
+            free(chunk.data);
+        free(*data);
+        *data = NULL;
+        return -6;
+    }
+
+    /* Store raw JSON for caching (save original API response) */
+    /* This is temporarily stored in data structure for saving to cache */
+    /* Will be freed after cache save */
+    (*data)->_raw_json_cache = chunk.data; /* Transfer ownership */
+
+    printf("[METEO] Successfully fetched weather data\n");
     return 0;
 }

@@ -30,6 +30,9 @@ typedef struct {
     char  city_name[128];
     float latitude;
     float longitude;
+
+    /* Internal: raw JSON from API (for caching) - DO NOT USE DIRECTLY */
+    char* _raw_json_cache;
 } WeatherData;
 
 /* Location structure */

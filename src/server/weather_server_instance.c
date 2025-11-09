@@ -44,7 +44,6 @@ int weather_server_instance_initiate_ptr(HTTPServerConnection*   connection,
     return 0;
 }
 
-
 int weather_server_instance_on_request(void* context) {
     WeatherServerInstance* inst = (WeatherServerInstance*)context;
     HTTPServerConnection*  conn = inst->connection;
@@ -73,12 +72,12 @@ int weather_server_instance_on_request(void* context) {
 
     // Construct HTTP response header safely
     char header[256];
-    int header_len = snprintf(header, sizeof(header),
-                              "HTTP/1.1 200 OK\r\n"
-                              "Content-Type: text/json\r\n"
-                              "Content-Length: %zu\r\n"
-                              "\r\n",
-                              body_len);
+    int  header_len = snprintf(header, sizeof(header),
+                               "HTTP/1.1 200 OK\r\n"
+                                "Content-Type: text/json\r\n"
+                                "Content-Length: %zu\r\n"
+                                "\r\n",
+                               body_len);
 
     if (header_len < 0 || header_len >= (int)sizeof(header)) {
         fprintf(stderr, "Header formatting error or truncation\n");
@@ -87,7 +86,8 @@ int weather_server_instance_on_request(void* context) {
 
     size_t total_len = header_len + body_len;
 
-    uint8_t* response = malloc(total_len + 1); // +1 for optional null-terminator
+    uint8_t* response =
+        malloc(total_len + 1); // +1 for optional null-terminator
     if (!response) {
         perror("Out of memory");
         return -1;

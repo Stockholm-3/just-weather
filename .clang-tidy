@@ -13,6 +13,7 @@ Checks: >
   cppcoreguidelines-pro-type-const-cast,
   cppcoreguidelines-pro-type-reinterpret-cast,
   readability-isolate-declaration,
+ # misc-unused-parameters
 #  cppcoreguidelines-avoid-goto,
 #  cppcoreguidelines-avoid-magic-numbers
 
@@ -76,6 +77,10 @@ CheckOptions:
   # Warn if a non-const parameter should be const
   - key: readability-non-const-parameter.IgnoreAllCaps
     value: 1
+
+  - key: llvm-include-order.IgnoreMainHeader
+    value: 0
+
 
 WarningsAsErrors: '*'
 FormatStyle: file

@@ -1,9 +1,9 @@
 #ifndef TCP_CLIENT_H
 #define TCP_CLIENT_H
 
-#include <stddef.h>
 #include <fcntl.h>
 #include <netdb.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <sys/socket.h>
 #include <sys/types.h>

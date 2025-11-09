@@ -7,6 +7,4 @@ void custom_callback(const char* response) {
            response);
 }
 
-int main(void) {
-    return 0;
-}
+int main(void) { return 0; }

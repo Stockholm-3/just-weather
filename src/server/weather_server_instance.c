@@ -1,5 +1,7 @@
 #include "weather_server_instance.h"
 
+#include "open_meteo_handler.h"
+
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,41 +52,87 @@ int weather_server_instance_on_request(void* context) {
 
     printf("method: %s\n", conn->method);
     printf("url: %s\n", conn->request_path);
-    printf("content size:\n%zu\n", conn->content_len);
-    printf("body:\n%s\n", conn->body);
 
-    const char* mock_json = "{\n"
-                            "  \"coords\": {\n"
-                            "    \"lat\": 59.33,\n"
-                            "    \"lon\": 18.07\n"
-                            "  },\n"
-                            "  \"current\": {\n"
-                            "    \"temperature_c\": 8.5,\n"
-                            "    \"wind_mps\": 3.2,\n"
-                            "    \"wind_deg\": 133.0,\n"
-                            "    \"elevation_m\": 45.0,\n"
-                            "    \"weather_code\": 1\n"
-                            "  },\n"
-                            "  \"updated_at\": \"2025-11-04T08:00:00Z\"\n"
-                            "}";
+    // Parse URL to get path and query
+    char path[256]  = {0};
+    char query[512] = {0};
+
+    // Split request_path into path and query
+    char* question_mark = strchr(conn->request_path, '?');
+    if (question_mark) {
+        size_t path_len = question_mark - conn->request_path;
+        strncpy(path, conn->request_path, path_len);
+        path[path_len] = '\0';
+        strcpy(query, question_mark + 1);
+    } else {
+        strcpy(path, conn->request_path);
+    }
+
+    // Check if this is the weather endpoint
+    if (strcmp(conn->method, "GET") == 0 && strcmp(path, "/v1/current") == 0) {
+        printf("Routing to Open-Meteo API\n");
+
+        char* json_response = NULL;
+        int   status_code   = 0;
+
+        // Call weather handler
+        open_meteo_handler_current(query, &json_response, &status_code);
+
+        if (json_response) {
+            // Construct HTTP response header
+            char header[256];
+            int  header_len =
+                snprintf(header, sizeof(header),
+                         "HTTP/1.1 %d %s\r\n"
+                         "Content-Type: application/json\r\n"
+                         "Content-Length: %zu\r\n"
+                         "\r\n",
+                         status_code, status_code == 200 ? "OK" : "Error",
+                         strlen(json_response));
+
+            size_t   total_len = header_len + strlen(json_response);
+            uint8_t* response  = malloc(total_len + 1);
+            if (response) {
+                memcpy(response, header, header_len);
+                strcpy((char*)response + header_len, json_response);
+
+                conn->write_buffer = response;
+                conn->write_size   = total_len;
+            }
+
+            free(json_response);
+            return 0;
+        }
+    }
+
+    // Default response for other endpoints
+    const char* body_to_send = "{\n"
+                               "  \"location\": {\n"
+                               "    \"latitude\": 51.5074,\n"
+                               "    \"longitude\": -0.1278\n"
+                               "  },\n"
+                               "  \"temperature_c\": 21.3,\n"
+                               "  \"humidity_percent\": 62,\n"
+                               "  \"windspeed_mps\": 5.4\n"
+                               "}";
 
     // Construct HTTP response header
     char header[256];
     int  header_len = snprintf(header, sizeof(header),
                                "HTTP/1.1 200 OK\r\n"
-                                "Content-Type: text/json\r\n"
+                                "Content-Type: application/json\r\n"
                                 "Content-Length: %zu\r\n"
                                 "\r\n",
-                               strlen(mock_json));
+                               strlen(body_to_send));
 
-    size_t   total_len = header_len + strlen(mock_json);
+    size_t   total_len = header_len + strlen(body_to_send);
     uint8_t* response  = malloc(total_len + 1);
     if (!response) {
         perror("Out of mem");
         return -1;
     }
     memcpy(response, header, header_len);
-    strcpy((char*)response + header_len, mock_json);
+    strcpy((char*)response + header_len, body_to_send);
 
     conn->write_buffer = response;
     conn->write_size   = total_len;

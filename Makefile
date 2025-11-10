@@ -30,7 +30,7 @@ CFLAGS      := $(CFLAGS_BASE) -Wall -Werror -Wfatal-errors -MMD -MP \
 JANSSON_CFLAGS := $(filter-out -Werror -Wfatal-errors,$(CFLAGS)) -w
 
 LDFLAGS     := -flto -Wl,--gc-sections
-LIBS        := -lcurl
+LIBS        := -lcurl #curl wont bes used anymore!!
 
 # ------------------------------------------------------------
 # Source and object files

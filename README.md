@@ -1,4 +1,4 @@
-![just-weather-logo](https://chatgpt.com/backend-api/estuary/content?id=file_0000000051e471f5858d099198493b61&ts=489686&p=fs&cid=1&sig=c6da46a4b17c8229d76cc4272572eb249435b2b0810c953e586c8929b900de19&v=0)
+![just-weather-logo](https://ibb.co/hJ1x0WWL)
 
 A lightweight C weather client and server providing a simple HTTP REST API
 

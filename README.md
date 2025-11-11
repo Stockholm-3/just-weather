@@ -1,4 +1,4 @@
-![just-weather-logo](https://i.ibb.co/ks6VZ885/just-wether-logo.png)
+![Just Weather logo](https://i.imgur.com/m6CMJxz.png)
 
 A lightweight C weather client and server providing a simple HTTP REST API
 

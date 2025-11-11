@@ -1,9 +1,9 @@
-# Just Weather
+![just-weather-logo](https://chatgpt.com/backend-api/estuary/content?id=file_0000000051e471f5858d099198493b61&ts=489686&p=fs&cid=1&sig=c6da46a4b17c8229d76cc4272572eb249435b2b0810c953e586c8929b900de19&v=0)
 
-> A lightweight C weather server providing a simple HTTP REST API
+A lightweight C weather client and server providing a simple HTTP REST API
 
-Just Weather is a **network server** built as a school project at **Chas Academy (SUVX25)** by **Team Stockholm 3**.  
-It acts as a bridge between clients and [open-meteo.com](https://open-meteo.com), providing real-time weather data via a simple REST API
+>Just Weather is a **HTTP server** and a simple client targeted for ESP32, built as a school project at **Chas Academy (SUVX25)** by **Team Stockholm 3**.  
+>It acts as a bridge between clients and [open-meteo.com](https://open-meteo.com), providing real-time weather data via a simple REST API
 
 ![C](https://img.shields.io/badge/C-%2300599C.svg?style=flat&logo=c&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)

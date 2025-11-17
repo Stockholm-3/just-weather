@@ -14,7 +14,7 @@ int http_server_initiate(HTTPServer*            server,
                          HttpServerOnConnection on_connection) {
     server->onConnection = on_connection;
 
-    tcp_server_initiate(&server->tcpServer, "8080", http_server_on_accept,
+    tcp_server_initiate(&server->tcpServer, "10622", http_server_on_accept,
                         server);
 
     server->task = smw_create_task(server, http_server_task_work);

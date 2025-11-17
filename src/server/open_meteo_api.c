@@ -5,6 +5,7 @@
 #include "hash_md5.h"
 
 #include <curl/curl.h>
+#include <errno.h>
 #include <jansson.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,7 +16,7 @@
 /* ============= Configuration ============= */
 
 #define API_BASE_URL "https://api.open-meteo.com/v1/forecast"
-#define DEFAULT_CACHE_DIR "./cache"
+#define DEFAULT_CACHE_DIR "./cache/weather_cache"
 #define DEFAULT_CACHE_TTL 900 /* 15 minutes */
 
 /* ============= Global State ============= */
@@ -120,6 +121,47 @@ static const char* get_wind_direction_name(int degrees) {
 }
 
 /* ============= Public API Implementation ============= */
+/**
+ * Create directory and all parent directories (like mkdir -p)
+ */
+static int mkdir_recursive(const char* path, mode_t mode) {
+    char   tmp[512];
+    char*  p = NULL;
+    size_t len;
+
+    snprintf(tmp, sizeof(tmp), "%s", path);
+    len = strlen(tmp);
+
+    if (tmp[len - 1] == '/') {
+        tmp[len - 1] = 0;
+    }
+
+    for (p = tmp + 1; *p; p++) {
+        if (*p == '/') {
+            *p = 0;
+
+            if (mkdir(tmp, mode) != 0) {
+                if (errno != EEXIST) {
+                    fprintf(stderr, "Failed to create dir: %s (errno: %d)\n",
+                            tmp, errno);
+                    return -1;
+                }
+            }
+
+            *p = '/';
+        }
+    }
+
+    if (mkdir(tmp, mode) != 0) {
+        if (errno != EEXIST) {
+            fprintf(stderr, "Failed to create dir: %s (errno: %d)\n", tmp,
+                    errno);
+            return -1;
+        }
+    }
+
+    return 0;
+}
 
 int open_meteo_api_init(WeatherConfig* config) {
     if (!config) {
@@ -130,13 +172,8 @@ int open_meteo_api_init(WeatherConfig* config) {
     g_config = *config;
 
     /* Create cache directory if it doesn't exist */
-    struct stat st = {0};
-    if (stat(g_config.cache_dir, &st) == -1) {
-#ifdef _WIN32
-        mkdir(g_config.cache_dir);
-#else
-        mkdir(g_config.cache_dir, 0755);
-#endif
+    if (mkdir_recursive(g_config.cache_dir, 0755) != 0) {
+        fprintf(stderr, "[METEO] Warning: Failed to create cache directory\n");
     }
 
     /* Initialize curl globally */
@@ -332,19 +369,6 @@ int open_meteo_api_parse_query(const char* query, float* lat, float* lon) {
     return -1;
 }
 
-int open_meteo_api_get_city_name(float lat, float lon, char* city_name,
-                                 size_t size) {
-    if (!city_name || size == 0) {
-        return -1;
-    }
-
-    /* For now, just use coordinates as name */
-    /* In production, you'd use reverse geocoding API */
-    snprintf(city_name, size, "Location (%.4f, %.4f)", lat, lon);
-
-    return 0;
-}
-
 /* ============= Internal Functions Implementation ============= */
 
 /**
@@ -521,11 +545,6 @@ static int load_weather_from_cache(const char* filepath, WeatherData** data) {
     if (longitude)
         (*data)->longitude = json_real_value(longitude);
 
-    /* Get city name based on coordinates */
-    open_meteo_api_get_city_name((*data)->latitude, (*data)->longitude,
-                                 (*data)->city_name,
-                                 sizeof((*data)->city_name));
-
     json_decref(root);
     return 0;
 }
@@ -658,8 +677,6 @@ static int parse_weather_json(const char* json_str, WeatherData* data,
     /* Set location */
     data->latitude  = lat;
     data->longitude = lon;
-    open_meteo_api_get_city_name(lat, lon, data->city_name,
-                                 sizeof(data->city_name));
 
     json_decref(root);
     return 0;
@@ -692,7 +709,7 @@ static int fetch_weather_from_api(Location* location, WeatherData** data) {
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)&chunk);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "weatherio/1.0");
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "just-weather/1.0");
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
 
     /* Perform request */

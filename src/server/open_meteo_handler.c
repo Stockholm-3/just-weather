@@ -34,7 +34,7 @@ static char* build_error_response(const char* error_msg, int code) {
 
 /* Initialize weather server module */
 int open_meteo_handler_init(void) {
-    WeatherConfig config = {.cache_dir = "./cache/",
+    WeatherConfig config = {.cache_dir = "./cache/weather_cache",
                             .cache_ttl = 900, /* 15 minutes */
                             .use_cache = true};
 
@@ -94,4 +94,4 @@ int open_meteo_handler_current(const char* query_string, char** response_json,
 }
 
 /* Cleanup weather server module */
-void wopen_meteo_handler_cleanup(void) { open_meteo_api_cleanup(); }
+void open_meteo_handler_cleanup(void) { open_meteo_api_cleanup(); }

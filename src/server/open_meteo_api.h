@@ -71,8 +71,4 @@ char* open_meteo_api_build_json_response(WeatherData* data, float lat,
 /* Parse query parameters: lat=X&long=Y or lat=X&lon=Y */
 int open_meteo_api_parse_query(const char* query, float* lat, float* lon);
 
-/* Get city name from coordinates using reverse geocoding */
-int open_meteo_api_get_city_name(float lat, float lon, char* city_name,
-                                 size_t size);
-
 #endif /* open_meteo_api_H */

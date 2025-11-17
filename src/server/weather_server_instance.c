@@ -1,6 +1,7 @@
 #include "weather_server_instance.h"
 
 #include "open_meteo_handler.h"
+#include "weather_location_handler.h"
 
 #include <stddef.h>
 #include <stdio.h>
@@ -68,7 +69,88 @@ int weather_server_instance_on_request(void* context) {
         strcpy(path, conn->request_path);
     }
 
-    // Check if this is the weather endpoint
+    // ==================================================================
+    // ENDPOINT: /v1/weather?city=<name>&country=<code>
+    // Weather by city name (uses geocoding + weather API)
+    // ==================================================================
+    if (strcmp(conn->method, "GET") == 0 && strcmp(path, "/v1/weather") == 0) {
+        printf("Routing to Weather Location Handler\n");
+
+        char* json_response = NULL;
+        int   status_code   = 0;
+
+        // Call the city-based weather handler
+        weather_location_handler_by_city(query, &json_response, &status_code);
+
+        if (json_response) {
+            char header[256];
+            int  header_len =
+                snprintf(header, sizeof(header),
+                         "HTTP/1.1 %d %s\r\n"
+                         "Content-Type: application/json\r\n"
+                         "Content-Length: %zu\r\n"
+                         "\r\n",
+                         status_code, status_code == 200 ? "OK" : "Error",
+                         strlen(json_response));
+
+            size_t   total_len = header_len + strlen(json_response);
+            uint8_t* response  = malloc(total_len + 1);
+            if (response) {
+                memcpy(response, header, header_len);
+                strcpy((char*)response + header_len, json_response);
+
+                conn->write_buffer = response;
+                conn->write_size   = total_len;
+            }
+
+            free(json_response);
+            return 0;
+        }
+    }
+
+    // ==================================================================
+    // ENDPOINT: /v1/cities?query=<search>
+    // City search (autocomplete)
+    // ==================================================================
+    if (strcmp(conn->method, "GET") == 0 && strcmp(path, "/v1/cities") == 0) {
+        printf("Routing to City Search Handler\n");
+
+        char* json_response = NULL;
+        int   status_code   = 0;
+
+        weather_location_handler_search_cities(query, &json_response,
+                                               &status_code);
+
+        if (json_response) {
+            char header[256];
+            int  header_len =
+                snprintf(header, sizeof(header),
+                         "HTTP/1.1 %d %s\r\n"
+                         "Content-Type: application/json\r\n"
+                         "Content-Length: %zu\r\n"
+                         "\r\n",
+                         status_code, status_code == 200 ? "OK" : "Error",
+                         strlen(json_response));
+
+            size_t   total_len = header_len + strlen(json_response);
+            uint8_t* response  = malloc(total_len + 1);
+            if (response) {
+                memcpy(response, header, header_len);
+                strcpy((char*)response + header_len, json_response);
+
+                conn->write_buffer = response;
+                conn->write_size   = total_len;
+            }
+
+            free(json_response);
+            return 0;
+        }
+    }
+
+    // ==================================================================
+    // ENDPOINT: /v1/current?lat=<lat>&lon=<lon>
+    // Weather by coordinates
+    // ==================================================================
     if (strcmp(conn->method, "GET") == 0 && strcmp(path, "/v1/current") == 0) {
         printf("Routing to Open-Meteo API\n");
 
@@ -105,21 +187,24 @@ int weather_server_instance_on_request(void* context) {
         }
     }
 
-    // Default response for other endpoints
-    const char* body_to_send = "{\n"
-                               "  \"location\": {\n"
-                               "    \"latitude\": 51.5074,\n"
-                               "    \"longitude\": -0.1278\n"
-                               "  },\n"
-                               "  \"temperature_c\": 21.3,\n"
-                               "  \"humidity_percent\": 62,\n"
-                               "  \"windspeed_mps\": 5.4\n"
-                               "}";
+    // ==================================================================
+    // DEFAULT RESPONSE (for unknown endpoints)
+    // ==================================================================
+    const char* body_to_send =
+        "{\n"
+        "  \"error\": true,\n"
+        "  \"message\": \"Unknown endpoint\",\n"
+        "  \"available_endpoints\": [\n"
+        "    \"GET /v1/weather?city=<name>&country=<code>\",\n"
+        "    \"GET /v1/current?lat=<lat>&lon=<lon>\",\n"
+        "    \"GET /v1/cities?query=<search>\"\n"
+        "  ]\n"
+        "}";
 
     // Construct HTTP response header
     char header[256];
     int  header_len = snprintf(header, sizeof(header),
-                               "HTTP/1.1 200 OK\r\n"
+                               "HTTP/1.1 404 Not Found\r\n"
                                 "Content-Type: application/json\r\n"
                                 "Content-Length: %zu\r\n"
                                 "\r\n",

@@ -20,12 +20,11 @@ else
 	BUILD_TYPE  := Debug
 endif
 
-
 # ------------------------------------------------------------
 # Compiler and linker flags
 # ------------------------------------------------------------
 CFLAGS      := $(CFLAGS_BASE) -Wall -Werror -Wfatal-errors -MMD -MP \
-               -Ilib/jansson -Isrc/lib -Isrc/server -Iincludes
+               -Ilib/jansson -Isrc/lib -Isrc/server -Iincludes \
 
 JANSSON_CFLAGS := $(filter-out -Werror -Wfatal-errors,$(CFLAGS)) -w
 
@@ -128,7 +127,6 @@ run-client: $(BIN_CLIENT)
 clean:
 	@rm -rf build
 	@echo "Cleaned build artifacts."
-
 
 # ------------------------------------------------------------
 # Start server in detached tmux session

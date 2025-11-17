@@ -1,0 +1,9 @@
+GET /v1/current
+GET /v1/current?lat=50&lon=8
+GET /v1/current?latitude=90&longitude=0
+POST /v1/current
+GET /?
+GET /
+BAD /%%%%
+GET /v1/current?broken=query==&lat==
+GET /v1/other

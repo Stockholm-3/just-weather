@@ -1,0 +1,5 @@
+{
+    "files.associations": {
+        "http_server_connection.h": "c"
+    }
+}

@@ -24,7 +24,7 @@ endif
 # Compiler and linker flags
 # ------------------------------------------------------------
 CFLAGS      := $(CFLAGS_BASE) -Wall -Werror -Wfatal-errors -MMD -MP \
-               -Ilib/jansson -Isrc/lib -Isrc/server -Iincludes \
+               -Ilib/jansson -Isrc/lib -Isrc/lib/http_server -Isrc/server -Iincludes
 
 JANSSON_CFLAGS := $(filter-out -Werror -Wfatal-errors,$(CFLAGS)) -w
 
@@ -37,7 +37,7 @@ LIBS        := -lcurl #curl wont bes used anymore!!
 SRC_SERVER := $(shell find -L $(SRC_DIR)/server -type f -name '*.c' ! -path "*/jansson/*") \
               $(shell find -L $(SRC_DIR)/lib -type f -name '*.c' ! -path "*/jansson/*")
 
-SRC_CLIENT := $(shell find -L $(SRC_DIR)/client -type f -name '*.c' ! -path "*/jansson/*") \
+SRC_CLIENT := $(shell find -L $(SRC_DIR)/client -type f -name '*.c' -o -name '*.c' ! -path "*/jansson/*") \
               $(shell find -L $(SRC_DIR)/lib -type f -name '*.c' ! -path "*/jansson/*")
 
 OBJ_SERVER  := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC_SERVER))
@@ -201,3 +201,19 @@ workflow: workflow-build workflow-format
 # ------------------------------------------------------------
 -include $(DEP_SERVER)
 -include $(DEP_CLIENT)
+
+# ------------------------------------------------------------
+# Fuzz target
+# ------------------------------------------------------------
+# Filter out main.c and open_meteo_api.c for fuzz target
+SRC_FUZZ := $(filter-out src/server/main.c src/server/open_meteo_api.c src/server/open_meteo_handler.c, $(SRC_SERVER))
+
+.PHONY: fuzz
+fuzz:
+	@echo "Building fuzz target..."
+	clang -g -O1 -fsanitize=fuzzer,address,undefined \
+		tests/fuzz/fuzz_http.c \
+		$(SRC_FUZZ) \
+		$(JANSSON_SRC) \
+		$(CFLAGS) \
+		-o tests/fuzz/fuzz_http

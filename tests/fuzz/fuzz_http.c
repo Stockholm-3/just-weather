@@ -1,9 +1,10 @@
 #include "http_server/http_server_connection.h"
 #include "weather_server_instance.h"
-#include <stdint.h>
-#include <stddef.h>
 
-int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+#include <stddef.h>
+#include <stdint.h>
+
+int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     // 1. Initialize HTTP connection (fd = -1 means dummy socket)
     HTTPServerConnection* conn = NULL;
     if (http_server_connection_initiate_ptr(-1, &conn) != 0 || conn == NULL)
@@ -21,8 +22,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 
     // 2. Initialize WeatherServerInstance using official API
     WeatherServerInstance* instance = NULL;
-    if (weather_server_instance_initiate_ptr(conn, &instance) != 0
-        || instance == NULL) {
+    if (weather_server_instance_initiate_ptr(conn, &instance) != 0 ||
+        instance == NULL) {
 
         http_server_connection_dispose_ptr(&conn);
         return 0;

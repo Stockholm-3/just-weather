@@ -107,13 +107,18 @@ int weather_server_instance_on_request(void* context) {
 
     // Default response for other endpoints
     const char* body_to_send = "{\n"
-                               "  \"location\": {\n"
-                               "    \"latitude\": 51.5074,\n"
-                               "    \"longitude\": -0.1278\n"
+                               "  \"coords\": {\n"
+                               "    \"lat\": 59.33,\n"
+                               "    \"lon\": 18.07\n"
                                "  },\n"
-                               "  \"temperature_c\": 21.3,\n"
-                               "  \"humidity_percent\": 62,\n"
-                               "  \"windspeed_mps\": 5.4\n"
+                               "  \"current\": {\n"
+                               "    \"temperature_c\": 8.5,\n"
+                               "    \"wind_mps\": 3.2,\n"
+                               "    \"wind_deg\": 133.0,\n"
+                               "    \"elevation_m\": 45.0,\n"
+                               "    \"weather_code\": 1\n"
+                               "  },\n"
+                               "  \"updated_at\": \"2025-11-04T08:00:00Z\"\n"
                                "}";
 
     // Construct HTTP response header

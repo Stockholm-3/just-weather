@@ -69,7 +69,7 @@ int weather_server_instance_on_request(void* context) {
     }
 
     // Check if this is the weather endpoint
-    if (strcmp(conn->method, "GET") == 0 && strcmp(path, "/v1/current") == 0) {
+    if (strcmp(conn->method, "POST") == 0 && strcmp(path, "/v1/current") == 0) {
         printf("Routing to Open-Meteo API\n");
 
         char* json_response = NULL;
@@ -105,34 +105,43 @@ int weather_server_instance_on_request(void* context) {
         }
     }
 
-    // Default response for other endpoints
-    const char* body_to_send = "{\n"
-                               "  \"location\": {\n"
-                               "    \"latitude\": 51.5074,\n"
-                               "    \"longitude\": -0.1278\n"
-                               "  },\n"
-                               "  \"temperature_c\": 21.3,\n"
-                               "  \"humidity_percent\": 62,\n"
-                               "  \"windspeed_mps\": 5.4\n"
-                               "}";
+    // Default echo endpoint - show request information
+    char* body_to_send = malloc(2048);
+    if (!body_to_send) {
+        perror("Out of mem");
+        return -1;
+    }
+
+    // Build JSON response with request information
+    int body_len = snprintf(
+        body_to_send, 2048,
+        "\n%s\n", conn->body ? (char*)conn->body : "{\"error\":\"no body sent\"}");
+    if (body_len < 0) {
+        free(body_to_send);
+        perror("Failed to format echo response");
+        return -1;
+    }
 
     // Construct HTTP response header
     char header[256];
     int  header_len = snprintf(header, sizeof(header),
                                "HTTP/1.1 200 OK\r\n"
-                                "Content-Type: application/json\r\n"
-                                "Content-Length: %zu\r\n"
-                                "\r\n",
-                               strlen(body_to_send));
+                               "Content-Type: application/json\r\n"
+                               "Content-Length: %d\r\n"
+                               "\r\n",
+                               body_len);
 
-    size_t   total_len = header_len + strlen(body_to_send);
+    size_t   total_len = header_len + body_len;
     uint8_t* response  = malloc(total_len + 1);
     if (!response) {
+        free(body_to_send);
         perror("Out of mem");
         return -1;
     }
     memcpy(response, header, header_len);
-    strcpy((char*)response + header_len, body_to_send);
+    memcpy((char*)response + header_len, body_to_send, body_len);
+
+    free(body_to_send);
 
     conn->write_buffer = response;
     conn->write_size   = total_len;

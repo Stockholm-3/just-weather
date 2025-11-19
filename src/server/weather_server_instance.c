@@ -117,17 +117,16 @@ int weather_server_instance_on_request(void* context) {
     if (conn->body && conn->content_len > 0) {
         // Copy the body safely using body_size
         size_t copy_size = conn->content_len;
-        if (copy_size > 2000) {  // Leave room for newlines
+        if (copy_size > 2000) {  // Leave room for newline
             copy_size = 2000;
         }
-        body_to_send[0] = '\n';
-        memcpy(body_to_send + 1, conn->body, copy_size);
-        body_to_send[1 + copy_size] = '\n';
-        body_to_send[2 + copy_size] = '\0';
-        body_len = 2 + copy_size;
+        memcpy(body_to_send, conn->body, copy_size);
+        body_to_send[copy_size] = '\n';
+        body_to_send[copy_size + 1] = '\0';
+        body_len = copy_size + 1;
     } else {
         body_len = snprintf(body_to_send, 2048, 
-                           "\n{\"error\":\"no body sent\"}\n");
+                           "{\"error\":\"no body sent\"}\n");
     }
     if (body_len < 0) {
         free(body_to_send);

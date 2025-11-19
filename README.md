@@ -70,9 +70,9 @@ build/<mode>/client/just-weather
 
 ## Weather API Documentation
 
-**Base URL:**  
+**Base URL:**
 ```
-TBD
+http://kontoret.onvo.se:10680/v1/
 ```
 
 ---
@@ -95,7 +95,7 @@ Retrieves the current weather data for the specified geographic coordinates.
 
 **Example Request:**  
 ```bash
-curl "http://localhost:8080/current?lat=59.33&lon=18.07"
+curl "http://kontoret.onvo.se:10680/v1/current?lat=59.33&lon=18.07"
 ```
 
 **Response Fields:**

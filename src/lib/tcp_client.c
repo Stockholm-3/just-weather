@@ -1,13 +1,13 @@
 #include "tcp_client.h"
 
 #include <errno.h>
-#include <fcntl.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <stdio.h>
 #include <string.h>
-#include <sys/socket.h>
+#include <netdb.h>
+#include <stdio.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 
 int tcp_client_initiate(TCPClient* c, int fd) {
     c->fd = fd;
@@ -15,9 +15,8 @@ int tcp_client_initiate(TCPClient* c, int fd) {
 }
 
 int tcp_client_connect(TCPClient* c, const char* host, const char* port) {
-    printf("TCP_DEBUG: tcp_client_connect called with host='%s', port='%s'\n",
-           host, port);
-
+    printf("TCP_DEBUG: tcp_client_connect called with host='%s', port='%s'\n", host, port);
+    
     if (c->fd >= 0) {
         printf("TCP_DEBUG: Socket already connected (fd=%d)\n", c->fd);
         return -1;
@@ -55,9 +54,9 @@ int tcp_client_connect(TCPClient* c, const char* host, const char* port) {
 
         printf("TCP_DEBUG: Calling connect()...\n");
         int connect_result = connect(fd, rp->ai_addr, rp->ai_addrlen);
-        printf("TCP_DEBUG: connect() returned %d, errno=%d (%s)\n",
+        printf("TCP_DEBUG: connect() returned %d, errno=%d (%s)\n", 
                connect_result, errno, strerror(errno));
-
+        
         if (connect_result == 0 || errno == EINPROGRESS) {
             printf("TCP_DEBUG: Connection initiated successfully\n");
             break;
@@ -69,7 +68,7 @@ int tcp_client_connect(TCPClient* c, const char* host, const char* port) {
     }
 
     freeaddrinfo(res);
-
+    
     if (fd < 0) {
         printf("TCP_DEBUG: All connection attempts failed\n");
         return -1;

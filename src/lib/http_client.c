@@ -1,18 +1,22 @@
 #include "http_client.h"
 
+#include "errno.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #define CHUNK_SIZE 4096
+#define PORTSIZE 100
 //---------------Internal functions----------------
 
 void http_client_work(void* _Context, uint64_t _MonTime);
 void http_client_dispose(http_client** _ClientPtr);
-int  parse_url(const char* url, char* hostname, int* port, char* path);
+int  parse_url(const char* url, char* hostname, char* port_str, char* path);
 //----------------------------------------------------
 
-int http_client_init(const char* _URL, http_client** _ClientPtr) {
+int http_client_init(const char* _URL, http_client** _ClientPtr,
+                     const char* port) {
     if (_URL == NULL || _ClientPtr == NULL)
         return -1;
 
@@ -34,7 +38,7 @@ int http_client_init(const char* _URL, http_client** _ClientPtr) {
     _Client->tcp_conn    = NULL;
     _Client->hostname[0] = '\0';
     _Client->path[0]     = '\0';
-    _Client->port        = 80;
+    _Client->port[0]     = '\0';
     //_Client->response[0] = '\0'; från funtion som finns i client.h
 
     *(_ClientPtr) = _Client;
@@ -44,9 +48,10 @@ int http_client_init(const char* _URL, http_client** _ClientPtr) {
 
 int http_client_get(const char* _URL, uint64_t _Timeout,
                     void (*_Callback)(const char* _Event,
-                                      const char* _Response)) {
+                                      const char* _Response),
+                    const char* port) {
     http_client* client = NULL;
-    if (http_client_init(_URL, &client) != 0)
+    if (http_client_init(_URL, &client, port) != 0)
         return -1;
 
     client->timeout  = _Timeout;
@@ -57,7 +62,7 @@ int http_client_get(const char* _URL, uint64_t _Timeout,
 
 http_client_state http_client_work_init(http_client* _Client) {
     // 1. Parse the URL to extract hostname, port, and path
-    if (parse_url(_Client->url, _Client->hostname, &_Client->port,
+    if (parse_url(_Client->url, _Client->hostname, _Client->port,
                   _Client->path) != 0) {
         // URL parsing failed
         if (_Client->callback != NULL)
@@ -76,7 +81,7 @@ http_client_state http_client_work_init(http_client* _Client) {
     _Client->response[0] = '\0';
 
     // 4. Log what we're about to do (optional)
-    printf("Initializing connection to %s:%d%s\n", _Client->hostname,
+    printf("Initializing connection to %s:%s%s\n", _Client->hostname,
            _Client->port, _Client->path);
 
     // 5. Move to connect state
@@ -84,81 +89,93 @@ http_client_state http_client_work_init(http_client* _Client) {
 }
 
 http_client_state http_client_work_connect(http_client* _Client) {
-    // Parse URL to get hostname and port
-    char hostname[256];
-    int  port = 80;
-    char path[512];
-    parse_url(_Client->url, hostname, &port, path);
-
-    // store tha parsed values in client struct
-    strcpy(_Client->hostname, hostname);
-    strcpy(_Client->path, path);
-    _Client->port = port;
-
-    // Convert port to string
-    char port_str[16];
-    snprintf(port_str, sizeof(port_str), "%d", port);
+    printf("DEBUG: Starting connection to %s:%s%s\n", _Client->hostname,
+           _Client->port, _Client->path);
 
     // Allocate TCPClient on heap
     TCPClient* tcp_client = malloc(sizeof(TCPClient));
     if (tcp_client == NULL) {
+        printf("DEBUG: Memory allocation failed for TCPClient\n");
         if (_Client->callback != NULL)
             _Client->callback("ERROR", "Memory allocation failed");
         return http_client_state_dispose;
     }
 
-    // CRITICAL: Initialize the TCPClient
-    tcp_client->fd = -1;
+    // Initialize the TCPClient
+    tcp_client->fd = -1; // <-- ADD THIS LINE
 
-    // Use TCP module to connect!
-    int result = tcp_client_connect(tcp_client, hostname, port_str);
+    printf("DEBUG: TCPClient allocated and initialized\n");
+
+    // Use TCP module to connect - use _Client->port directly
+    printf("DEBUG: Calling tcp_client_connect with %s:%s\n", _Client->hostname,
+           _Client->port);
+    int result =
+        tcp_client_connect(tcp_client, _Client->hostname, _Client->port);
+    printf("DEBUG: tcp_client_connect returned: %d\n", result);
 
     if (result != 0) {
+        printf("DEBUG: Connection failed immediately\n");
         if (_Client->callback != NULL)
             _Client->callback("ERROR", "Failed to initiate connection");
         free(tcp_client);
         return http_client_state_dispose;
     }
 
-    // Store the heap-allocated TCP client
+    printf("DEBUG: Connection initiated (non-blocking), moving to connecting "
+           "state\n");
     _Client->tcp_conn = tcp_client;
 
-    return http_client_state_writing;
+    return http_client_state_connecting;
 }
 
-/*http_client_state http_client_work_connecting(http_client* _Client)//
-{
-    // Check connection progress
-    if (_Client->tcp_conn != NULL) {
-        // This would depend on your TCP implementation
-        if (tcp_is_connected(_Client->tcp_conn)) {
-            _Client->isConnected = true;
-            return http_client_state_writing;
-        }
-
-        if (tcp_has_failed(_Client->tcp_conn)) {
-            _Client->connection_failed = true;
-            if (_Client->callback != NULL)
-                _Client->callback("ERROR", "Connection failed");
-            return http_client_state_dispose;
-        }
+http_client_state http_client_work_connecting(http_client* _Client) {
+    if (_Client->tcp_conn == NULL || _Client->tcp_conn->fd < 0) {
+        printf("DEBUG: No valid TCP connection\n");
+        return http_client_state_dispose;
     }
 
-    // Still connecting
-    return http_client_state_connecting;
-}*/
+    int fd = _Client->tcp_conn->fd;
+
+    // Check if connection has completed
+    int       error = 0;
+    socklen_t len   = sizeof(error);
+    if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
+        printf("DEBUG: getsockopt failed: %s\n", strerror(errno));
+        return http_client_state_dispose;
+    }
+
+    if (error == 0) {
+        // Connection successful!
+        printf("DEBUG: Connection established! Moving to writing.\n");
+        return http_client_state_writing;
+    } else if (error == EINPROGRESS || error == EALREADY) {
+        // Still connecting, try again next tick
+        printf("DEBUG: Still connecting... (error: %s)\n", strerror(error));
+        return http_client_state_connecting;
+    } else {
+        // Connection failed
+        printf("DEBUG: Connection failed: %s\n", strerror(error));
+        if (_Client->callback != NULL)
+            _Client->callback("ERROR", "Connection failed");
+        return http_client_state_dispose;
+    }
+}
 
 http_client_state http_client_work_writing(http_client* _Client) {
     if (_Client->write_buffer == NULL) {
+        printf("DEBUG: Allocating write buffer\n");
         // Allocate directly as uint8_t*
         _Client->write_buffer = malloc(1024);
         if (_Client->write_buffer == NULL) {
+            printf("DEBUG: Memory allocation failed for write buffer\n");
             if (_Client->callback != NULL)
                 _Client->callback("ERROR", "Memory allocation failed");
             return http_client_state_dispose;
         }
 
         // Cast to char* for snprintf, then back to uint8_t* is automatic
+        printf("DEBUG: Formatting HTTP request for path='%s', hostname='%s'\n",
+               _Client->path, _Client->hostname);
         int len = snprintf((char*)_Client->write_buffer, 1024,
                            "GET %s HTTP/1.1\r\n"
                            "Host: %s\r\n"
@@ -166,54 +183,102 @@ http_client_state http_client_work_writing(http_client* _Client) {
                            "\r\n",
                            _Client->path, _Client->hostname);
 
+        printf("DEBUG: HTTP request formatted, length=%d\n", len);
+        printf("DEBUG: Request content: %s\n", (char*)_Client->write_buffer);
+
         _Client->write_size   = len;
         _Client->write_offset = 0;
     }
 
-    // Rest of your code remains exactly the same...
-    ssize_t sent = tcp_client_write(
-        _Client->tcp_conn, _Client->write_buffer + _Client->write_offset,
-        _Client->write_size - _Client->write_offset);
+    // Add debugging for the send operation
+    printf("DEBUG: Attempting to send %zu bytes (offset=%zu, total=%zu)\n",
+           _Client->write_size - _Client->write_offset, _Client->write_offset,
+           _Client->write_size);
 
-    if (sent > 0) {
-        _Client->write_offset += sent;
-    } else if (sent < 0) {
-        if (_Client->callback != NULL)
-            _Client->callback("ERROR", "Send failed");
-        free(_Client->write_buffer);
-        _Client->write_buffer = NULL;
-        return http_client_state_dispose;
+    // Your existing send code here - add error checking
+    ssize_t sent = send(
+        _Client->tcp_conn->fd, _Client->write_buffer + _Client->write_offset,
+        _Client->write_size - _Client->write_offset, MSG_NOSIGNAL);
+
+    printf("DEBUG: send() returned: %zd, errno=%d (%s)\n", sent, errno,
+           strerror(errno));
+
+    if (sent < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            printf("DEBUG: Send would block, retrying later\n");
+            return http_client_state_writing; // Try again later
+        } else {
+            printf("DEBUG: Send failed with error: %s\n", strerror(errno));
+            if (_Client->callback != NULL)
+                _Client->callback("ERROR", "Send failed");
+            return http_client_state_dispose;
+        }
     }
 
+    printf("DEBUG: Successfully sent %zd bytes\n", sent);
+    _Client->write_offset += sent;
+
     if (_Client->write_offset >= _Client->write_size) {
+        printf("DEBUG: All data sent, moving to reading state\n");
         free(_Client->write_buffer);
         _Client->write_buffer = NULL;
         return http_client_state_reading;
     }
 
+    printf("DEBUG: More data to send, remaining=%zu\n",
+           _Client->write_size - _Client->write_offset);
     return http_client_state_writing;
 }
 
 http_client_state http_client_work_reading(http_client* client) {
     if (!client) {
-        return -1;
+        return http_client_state_dispose;
     }
+
+    printf("DEBUG: In reading state, read_buffer_size=%zu, body_start=%zu\n",
+           client->read_buffer_size, client->body_start);
 
     uint8_t chunk_buffer[CHUNK_SIZE];
     int     bytes_read =
         tcp_client_read(client->tcp_conn, chunk_buffer, sizeof(chunk_buffer));
 
+    printf("DEBUG: tcp_client_read returned: %d\n", bytes_read);
+
     if (bytes_read < 0) {
-        return -1; // real error
+        printf("DEBUG: Read error: %s\n", strerror(errno));
+        if (client->callback) {
+            client->callback("ERROR", "Read failed");
+        }
+        return http_client_state_dispose;
     } else if (bytes_read == 0) {
-        return 0;
+        printf("DEBUG: No data available, would block\n");
+
+        // Simple timeout check - you'll need to implement proper timing
+        // For now, just keep waiting
+        return http_client_state_reading;
     }
+
+    printf("DEBUG: Received %d bytes\n", bytes_read);
+
+    // Print the raw data as string to see what we're getting
+    printf("DEBUG: Raw data received: \"");
+    for (int i = 0; i < bytes_read; i++) {
+        if (chunk_buffer[i] >= 32 && chunk_buffer[i] <= 126) {
+            printf("%c", chunk_buffer[i]);
+        } else {
+            printf("\\x%02x", chunk_buffer[i]);
+        }
+    }
+    printf("\"\n");
 
     // Same buffer growth logic
     size_t   new_size   = client->read_buffer_size + bytes_read;
     uint8_t* new_buffer = realloc(client->read_buffer, new_size);
     if (!new_buffer) {
-        return -1;
+        if (client->callback) {
+            client->callback("ERROR", "Memory allocation failed");
+        }
+        return http_client_state_dispose;
     }
 
     client->read_buffer = new_buffer;
@@ -221,36 +286,64 @@ http_client_state http_client_work_reading(http_client* client) {
            bytes_read);
     client->read_buffer_size += bytes_read;
 
-    // Same header parsing logic, just different fields
+    // Debug: print the entire buffer so far
+    if (client->read_buffer_size > 0) {
+        printf("DEBUG: Total buffer so far (%zu bytes): \"",
+               client->read_buffer_size);
+        for (int i = 0;
+             i <
+             (client->read_buffer_size < 200 ? client->read_buffer_size : 200);
+             i++) {
+            if (client->read_buffer[i] >= 32 && client->read_buffer[i] <= 126) {
+                printf("%c", client->read_buffer[i]);
+            } else {
+                printf("\\x%02x", client->read_buffer[i]);
+            }
+        }
+        printf("\"\n");
+    }
+
+    // Header parsing logic
     if (client->body_start == 0) {
+        printf("DEBUG: Looking for end of headers (CRLF CRLF)...\n");
         for (int i = 0; i <= client->read_buffer_size - 4; i++) {
-            // Same CRLF CRLF detection
             if (client->read_buffer[i] == '\r' &&
                 client->read_buffer[i + 1] == '\n' &&
                 client->read_buffer[i + 2] == '\r' &&
                 client->read_buffer[i + 3] == '\n') {
 
+                printf("DEBUG: Found end of headers at position %d\n", i);
                 int   header_end = i + 4;
                 char* headers    = malloc(header_end + 1);
                 if (!headers) {
-                    return -1;
+                    if (client->callback) {
+                        client->callback("ERROR", "Memory allocation failed");
+                    }
+                    return http_client_state_dispose;
                 }
 
                 memcpy(headers, client->read_buffer, header_end);
                 headers[header_end] = '\0';
 
-                // Parse response instead of request
+                printf("DEBUG: Headers:\n%s\n", headers);
+
+                // Parse response
                 int  status_code     = 0;
                 char status_text[64] = {0};
-                sscanf(headers, "HTTP/1.%*d %d %63[^\r\n]", &status_code,
-                       status_text);
+                int  parsed = sscanf(headers, "HTTP/1.%*d %d %63[^\r\n]",
+                                     &status_code, status_text);
+                printf("DEBUG: Parsed status: %d, code=%d, text=%s\n", parsed,
+                       status_code, status_text);
 
-                // Same Content-Length parsing
+                // Parse Content-Length
                 size_t content_len     = 0;
                 char*  content_len_ptr = strstr(headers, "Content-Length:");
                 if (content_len_ptr) {
                     sscanf(content_len_ptr, "Content-Length: %zu",
                            &content_len);
+                    printf("DEBUG: Found Content-Length: %zu\n", content_len);
+                } else {
+                    printf("DEBUG: No Content-Length header found\n");
                 }
 
                 free(headers);
@@ -259,38 +352,59 @@ http_client_state http_client_work_reading(http_client* client) {
                 client->content_len = content_len;
                 client->body_start  = header_end;
 
+                printf("DEBUG: Headers parsed - Status: %d, Content-Length: "
+                       "%zu, Body starts at: %zu\n",
+                       status_code, content_len, client->body_start);
                 break;
             }
         }
+
+        if (client->body_start == 0) {
+            printf("DEBUG: Still looking for end of headers...\n");
+        }
     }
 
-    // Same completion check logic
-    if (client->body_start > 0 &&
-        client->read_buffer_size >= client->body_start + client->content_len) {
+    // Check if we have a complete response
+    if (client->body_start > 0) {
+        printf("DEBUG: Headers found, checking completeness - body_start=%zu, "
+               "content_len=%zu, total_received=%zu\n",
+               client->body_start, client->content_len,
+               client->read_buffer_size);
 
-        client->state = http_client_state_done;
+        if (client->read_buffer_size >=
+            client->body_start + client->content_len) {
+            printf("DEBUG: Complete response received!\n");
 
-        // Extract response body
-        if (client->content_len > 0) {
-            client->body = malloc(client->content_len + 1);
-            if (client->body) {
-                memcpy(client->body, client->read_buffer + client->body_start,
-                       client->content_len);
-                client->body[client->content_len] = '\0';
+            // Extract response body
+            if (client->content_len > 0) {
+                client->body = malloc(client->content_len + 1);
+                if (client->body) {
+                    memcpy(client->body,
+                           client->read_buffer + client->body_start,
+                           client->content_len);
+                    client->body[client->content_len] = '\0';
+                    printf("DEBUG: Body extracted: %s\n", (char*)client->body);
+                }
             }
-        }
 
-        // Call client callback
-        if (client->callback) {
-            char response_info[256];
-            snprintf(response_info, sizeof(response_info),
-                     "Status: %d, Body: %s", client->status_code,
-                     client->body ? (char*)client->body : "");
-            client->callback("RESPONSE", response_info);
+            // Call client callback
+            if (client->callback) {
+                char response_info[256];
+                snprintf(response_info, sizeof(response_info),
+                         "Status: %d, Body: %s", client->status_code,
+                         client->body ? (char*)client->body : "");
+                client->callback("RESPONSE", response_info);
+            }
+
+            return http_client_state_done;
+        } else {
+            printf("DEBUG: Incomplete body - need %zu more bytes\n",
+                   (client->body_start + client->content_len) -
+                       client->read_buffer_size);
         }
     }
 
-    return 0;
+    return http_client_state_reading;
 }
 
 http_client_state http_client_work_done(http_client* _Client) {
@@ -359,10 +473,9 @@ void http_client_work(void* _Context, uint64_t _MonTime) {
         _Client->state = http_client_work_connect(_Client);
     } break;
 
-        /*case http_client_state_connecting:
-        {
-            _Client->state = http_client_work_connecting(_Client);
-        } break;*/
+    case http_client_state_connecting: {
+        _Client->state = http_client_work_connecting(_Client);
+    } break;
 
     case http_client_state_writing: {
         _Client->state = http_client_work_writing(_Client);
@@ -396,22 +509,22 @@ void http_client_dispose(http_client** _ClientPtr) {
     *(_ClientPtr) = NULL;
 }
 
-int parse_url(const char* url, char* hostname, int* port, char* path) {
+int parse_url(const char* url, char* hostname, char* port, char* path) {
     if (url == NULL || hostname == NULL || port == NULL || path == NULL)
         return -1;
 
     // Default values
-    *port = 80;
-    strcpy(path, "/"); // Default path
+    strcpy(port, "80"); // Default port as string
+    strcpy(path, "/");  // Default path
 
     // Skip "http://" or "https://"
     const char* start = url;
     if (strncmp(url, "http://", 7) == 0) {
         start = url + 7;
-        *port = 80;
+        strcpy(port, "80");
     } else if (strncmp(url, "https://", 8) == 0) {
         start = url + 8;
-        *port = 443;
+        strcpy(port, "443");
     }
 
     // Find the end of hostname (either ':', '/', or end of string)
@@ -430,16 +543,22 @@ int parse_url(const char* url, char* hostname, int* port, char* path) {
     // Check for port
     if (*end == ':') {
         end++; // Skip ':'
-        *port = atoi(end);
 
-        // Find start of path after port
+        // Extract port number as string
+        const char* port_start = end;
         while (*end && *end != '/')
             end++;
+
+        int port_len = end - port_start;
+        if (port_len > 0 && port_len < 16) {
+            strncpy(port, port_start, port_len);
+            port[port_len] = '\0';
+        }
     }
 
     // Extract path
     if (*end == '/') {
-        strncpy(path, end, 511); // Copy the path including the '/'
+        strncpy(path, end, 511);
         path[511] = '\0';
     }
 

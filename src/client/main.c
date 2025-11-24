@@ -1,8 +1,9 @@
-#include "smw.h"
 #include "http_client.h"
+#include "smw.h"
+
+#include <stdint.h>
 #include <stdio.h>
 #include <time.h>
-#include <stdint.h>
 
 // Manual implementation of system_monotonic_ms
 uint64_t system_monotonic_ms(void) {
@@ -24,7 +25,8 @@ int main() {
     smw_init();
 
     // Use http_client_get with port parameter
-    if (http_client_get("http://localhost:8080/", 10000, response_callback, "8080") != 0) {
+    if (http_client_get("http://localhost:8080/", 10000, response_callback,
+                        "8080") != 0) {
         perror("Failed to create HTTP client");
         return -1;
     }

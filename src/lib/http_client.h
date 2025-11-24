@@ -9,13 +9,13 @@
 #endif
 
 typedef enum {
-    http_client_state_init    = 0,
-    http_client_state_connect = 1,
-    http_client_state_connecting =2,
-    http_client_state_writing = 3,
-    http_client_state_reading = 4, // kanske lägger till connecting
-    http_client_state_done    = 5,
-    http_client_state_dispose = 6,
+    http_client_state_init       = 0,
+    http_client_state_connect    = 1,
+    http_client_state_connecting = 2,
+    http_client_state_writing    = 3,
+    http_client_state_reading    = 4, // kanske lägger till connecting
+    http_client_state_done       = 5,
+    http_client_state_dispose    = 6,
 
 } http_client_state;
 
@@ -44,7 +44,7 @@ typedef struct {
          tcp_conn;      // Handle to TCP connection, är en tcp connection struct
     char hostname[256]; // Parsed from URL
     char path[512];     // Parsed from URL
-    char  port[16];          // Parsed from URL
+    char port[16];      // Parsed from URL
     char response[8192];
 } http_client;
 
@@ -57,6 +57,7 @@ http_client_state http_client_work_done(http_client* _Client);
 
 int http_client_get(const char* _URL, uint64_t _Timeout,
                     void (*_Callback)(const char* _Event,
-                                      const char* _Response),const char* port);
+                                      const char* _Response),
+                    const char* port);
 
 #endif //__http_client_h_

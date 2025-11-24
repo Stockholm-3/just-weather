@@ -40,7 +40,7 @@ typedef struct {
     uint8_t* body;             // Extracted response body
 
     TCPClient*
-         tcp_conn;      // Handle to TCP connection, är en tcp connection struct
+         tcp_conn; // Handle to TCP connection, är en tcp connection struct
     char hostname[256]; // Parsed from URL
     char path[512];     // Parsed from URL
     int  port;          // Parsed from URL

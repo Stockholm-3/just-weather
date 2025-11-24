@@ -32,7 +32,7 @@ A lightweight C weather client and server providing a simple HTTP REST API
 1. Clone the repository:
 ```bash
 git clone https://github.com/stockholm-3/just-weather.git
-cd etherskies
+cd just-weather
 ```
 
 2. Ensure the lib branch is cloned into ../lib:

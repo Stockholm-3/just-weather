@@ -19,6 +19,8 @@ typedef enum {
 
 } http_client_state;
 
+// TODO:change to send response with heap instead of copyuting to
+// stack!!!!!!!!!!!!!!!!!!!
 typedef struct {
     http_client_state state;
     SmwTask*          task;

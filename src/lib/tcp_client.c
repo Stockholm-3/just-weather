@@ -8,15 +8,12 @@ int tcp_client_initiate(TCPClient* c, int fd) {
     return 0;
 }
 
-
-
-int tcp_client_connect(TCPClient* c, const char *host, const char *port)
-{
+int tcp_client_connect(TCPClient* c, const char* host, const char* port) {
     if (c->fd >= 0)
         return -1;
 
-    struct addrinfo hints = {0};
-    struct addrinfo* res = NULL;
+    struct addrinfo  hints = {0};
+    struct addrinfo* res   = NULL;
 
     hints.ai_family   = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
@@ -26,8 +23,7 @@ int tcp_client_connect(TCPClient* c, const char *host, const char *port)
         return -1;
 
     int fd = -1;
-    for (struct addrinfo *rp = res; rp; rp = rp->ai_next)
-    {
+    for (struct addrinfo* rp = res; rp; rp = rp->ai_next) {
         fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
         if (fd < 0)
             continue;
@@ -53,7 +49,6 @@ int tcp_client_connect(TCPClient* c, const char *host, const char *port)
     freeaddrinfo(res);
     return -1;
 }
-
 
 int tcp_client_write(TCPClient* c, const uint8_t* buf, size_t len) {
     return send(c->fd, buf, len, MSG_NOSIGNAL);

@@ -10,6 +10,6 @@ typedef struct {
 } Parser;
 
 /* 0 = OK; <0 = error */
-int parse_string(const char *input, Parser *out);
+int parse_string(const char* input, Parser* out);
 
 #endif /* PARSE_H */

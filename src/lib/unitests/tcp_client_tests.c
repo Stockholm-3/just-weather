@@ -97,33 +97,33 @@ TEST(tcp_client_ping_pong) {
 
     pthread_t th;
     assert(pthread_create(&th, NULL, server_thread, &S) == 0);
-    assert(wait_ready(&S, 2000) == 0); // server is up
+    assert(wait_ready(&S, 2000) == 0);
 
-    // port -> string
     char portstr[16];
     snprintf(portstr, sizeof(portstr), "%hu", S.port);
 
-    // cleíent
-    TCPClient c; tcp_client_initiate(&c, -1);
-    assert(tcp_client_connect(&c, "127.0.0.1", portstr) == 0);
+    TCPClient c;
+    tcp_client_initiate(&c, -1);   // или TCPClient_Initiate(&c, -1);
 
-    const char* msg = "ping\n";
+    int rc = tcp_client_connect(&c, "127.0.0.1", portstr);
+    printf("connect rc = %d, errno = %d (%s)\n", rc, errno, strerror(errno));
+    assert(rc == 0);   // ВАЖНО: тут БЕЗ второго вызова tcp_client_connect!
+
+    const char *msg = "ping\n";
     assert(tcp_client_write(&c, (const uint8_t*)msg, (int)strlen(msg)) == (int)strlen(msg));
 
-    // reading recv with timeout
-    uint8_t buf[256]; int total = 0;
-    for (int i=0; i<50; ++i) { // до ~500мс
-        int n = tcp_client_read(&c, buf+total, (int)sizeof(buf)-1-total);
+    uint8_t buf[256];
+    int total = 0;
+    for (int i = 0; i < 50; ++i) {
+        int n = tcp_client_read(&c, buf + total, (int)sizeof(buf) - 1 - total);
         if (n > 0) { total += n; break; }
-        usleep(10000); // 10мс
+        usleep(10000);
     }
     buf[total] = 0;
-    // waiting "pong\n"
     assert(total > 0);
     assert(strstr((char*)buf, "pong") != NULL);
 
     tcp_client_disconnect(&c);
-
     pthread_join(th, NULL);
     pthread_mutex_destroy(&S.mtx);
     pthread_cond_destroy(&S.cv);

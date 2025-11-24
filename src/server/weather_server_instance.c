@@ -127,6 +127,7 @@ int weather_server_instance_on_request(void* context) {
                                "HTTP/1.1 200 OK\r\n"
                                 "Content-Type: application/json\r\n"
                                 "Content-Length: %zu\r\n"
+                                "Access-Control-Allow-Origin: *\r\n"
                                 "\r\n",
                                strlen(body_to_send));
 

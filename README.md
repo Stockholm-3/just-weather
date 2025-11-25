@@ -1,9 +1,9 @@
-# Just Weather
+![Just Weather logo](https://i.imgur.com/m6CMJxz.png)
 
-> A lightweight C weather server providing a simple HTTP REST API
+A lightweight C weather client and server providing a simple HTTP REST API
 
-Just Weather is a **network server** built as a school project at **Chas Academy (SUVX25)** by **Team Stockholm 3**.  
-It acts as a bridge between clients and [open-meteo.com](https://open-meteo.com), providing real-time weather data via a simple REST API
+>Just Weather is a **HTTP server** and a simple client targeted for ESP32, built as a school project at **Chas Academy (SUVX25)** by **Team Stockholm 3**.  
+>It acts as a bridge between clients and [open-meteo.com](https://open-meteo.com), providing real-time weather data via a simple REST API
 
 ![C](https://img.shields.io/badge/C-%2300599C.svg?style=flat&logo=c&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -32,7 +32,7 @@ It acts as a bridge between clients and [open-meteo.com](https://open-meteo.com)
 1. Clone the repository:
 ```bash
 git clone https://github.com/stockholm-3/just-weather.git
-cd etherskies
+cd just-weather
 ```
 
 2. Ensure the lib branch is cloned into ../lib:
@@ -70,9 +70,9 @@ build/<mode>/client/just-weather
 
 ## Weather API Documentation
 
-**Base URL:**  
+**Base URL:**
 ```
-TBD
+http://stockholm3.onvo.se:81/v1/
 ```
 
 ---
@@ -95,7 +95,7 @@ Retrieves the current weather data for the specified geographic coordinates.
 
 **Example Request:**  
 ```bash
-curl "http://localhost:8080/current?lat=59.33&lon=18.07"
+curl "http://stockholm3.onvo.se:81/v1/current?lat=59.33&lon=18.07"
 ```
 
 **Response Fields:**

@@ -24,16 +24,6 @@ int tcp_client_connect(TCPClient* c, const char* host, const char* port) {
         return -1;
     }
 
-    /*
-    Funktionen getaddrinfo() kan ge en länkad lista av adressförslag för samma
-    värd och port. Till exempel kan en server ha både IPv4- och IPv6-adresser,
-    eller flera nätverkskort.
-
-    Varje nod i listan (struct addrinfo) innehåller en möjlig adress att prova.
-    Om första adressen inte fungerar (t.ex. connect() misslyckas), försöker man
-    nästa.
-    */
-
     int fd = -1;
     for (struct addrinfo* rp = res; rp; rp = rp->ai_next) {
         fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
@@ -67,13 +57,26 @@ int tcp_client_write(TCPClient* c, const uint8_t* buf, size_t len) {
 }
 
 int tcp_client_read(TCPClient* c, uint8_t* buf, size_t len) {
-    int n = recv(c->fd, buf, len, 0); // or MSG_DONTWAIT
+    int n = recv(c->fd, buf, len, 0);
+
     if (n < 0) {
+        // Error occurred
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            return 0; // no data available right now
+            // No data available right now - this is NOT an error in
+            // non-blocking mode Return -1 to indicate "try again later"
+            return -1;
         }
-        return -1; // real error
+        // Real error (connection reset, etc)
+        return -1;
     }
+
+    if (n == 0) {
+        // Connection closed by peer (EOF)
+        // Return 0 to indicate EOF
+        return 0;
+    }
+
+    // Successfully read n bytes
     return n;
 }
 

@@ -6,14 +6,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 //-----------------Configuration-----------------
 
-// Maximum request size: 10MB (защита от DoS атак)
+// Maximum request size: 10MB (protection against DoS attacks)
 #define MAX_REQUEST_SIZE (10 * 1024 * 1024)
 
-// Maximum header size: 16KB (достаточно для больших заголовков)
+// Maximum header size: 16KB (sufficient for large headers)
 #define MAX_HEADER_SIZE (16 * 1024)
+
+// Task work delay: 1ms (prevents busy loop and reduces CPU usage from 100% to
+// ~5%)
+#define TASK_WORK_DELAY_US 1000
 
 //-----------------Internal Functions-----------------
 
@@ -22,6 +27,8 @@ void http_server_connection_task_work(void* context, uint64_t mon_time);
 //----------------------------------------------------
 
 int http_server_connection_initiate(HTTPServerConnection* connection, int fd) {
+    printf("[HTTP-DEBUG] Connection initiated, FD=%d\n", fd);
+
     tcp_client_initiate(&connection->tcpClient, fd);
     connection->read_buffer      = NULL;
     connection->method           = NULL;
@@ -39,6 +46,7 @@ int http_server_connection_initiate(HTTPServerConnection* connection, int fd) {
     connection->task =
         smw_create_task(connection, http_server_connection_task_work);
 
+    printf("[HTTP-DEBUG] Connection initialized successfully\n");
     return 0;
 }
 
@@ -68,6 +76,7 @@ int http_server_connection_initiate_ptr(int                    fd,
 void http_server_connection_set_callback(
     HTTPServerConnection* connection, void* context,
     HttpServerConnectionOnRequest on_request) {
+    printf("[HTTP-DEBUG] Setting callback for connection\n");
     connection->context   = context;
     connection->onRequest = on_request;
 }
@@ -78,6 +87,9 @@ int http_server_connection_send(HTTPServerConnection* connection) {
         return 0;
     }
 
+    printf("[HTTP-DEBUG] Attempting to send %zu bytes\n",
+           connection->write_size - connection->write_offset);
+
     ssize_t sent =
         tcp_client_write(&connection->tcpClient,
                          connection->write_buffer + connection->write_offset,
@@ -86,7 +98,6 @@ int http_server_connection_send(HTTPServerConnection* connection) {
     if (sent > 0) {
         connection->write_offset += sent;
 
-        // Debug log
         printf("[HTTP] Sent %zd bytes, total: %zu/%zu\n", sent,
                connection->write_offset, connection->write_size);
     } else if (sent < 0) {
@@ -95,11 +106,10 @@ int http_server_connection_send(HTTPServerConnection* connection) {
             connection->state = HTTP_SERVER_CONNECTION_STATE_DISPOSE;
             return -1;
         }
-        // EAGAIN/EWOULDBLOCK - будем повторять позже
+        printf("[HTTP-DEBUG] Send would block, will retry\n");
         return 0;
     }
 
-    // Finished sending - CRITICAL: dispose immediately
     if (connection->write_offset >= connection->write_size) {
         printf("[HTTP] Response fully sent, disposing connection\n");
         connection->state = HTTP_SERVER_CONNECTION_STATE_DISPOSE;
@@ -114,28 +124,35 @@ int http_server_connection_receive(HTTPServerConnection* connection) {
         return -1;
     }
 
+    printf("[HTTP-DEBUG] Attempting to read data...\n");
+
     uint8_t chunk_buffer[CHUNK_SIZE];
 
     int bytes_read = tcp_client_read(&connection->tcpClient, chunk_buffer,
                                      sizeof(chunk_buffer));
 
+    printf("[HTTP-DEBUG] tcp_client_read returned: %d, errno: %d (%s)\n",
+           bytes_read, errno, strerror(errno));
+
     if (bytes_read < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            return 0; // No data available yet
+            printf("[HTTP-DEBUG] No data available yet (EAGAIN/EWOULDBLOCK), "
+                   "will retry\n");
+            return 0;
         }
         fprintf(stderr, "[HTTP] Read error: %s\n", strerror(errno));
+        connection->state = HTTP_SERVER_CONNECTION_STATE_DISPOSE;
         return -1;
     } else if (bytes_read == 0) {
-        // Client closed connection
-        printf("[HTTP] Client closed connection\n");
+        printf("[HTTP] Client closed connection (EOF)\n");
         connection->state = HTTP_SERVER_CONNECTION_STATE_DISPOSE;
         return 0;
     }
 
-    // CRITICAL: Check total size BEFORE allocating
+    printf("[HTTP-DEBUG] Successfully read %d bytes\n", bytes_read);
+
     size_t new_size = connection->read_buffer_size + bytes_read;
 
-    // Protection against DoS: reject requests that are too large
     if (new_size > MAX_REQUEST_SIZE) {
         fprintf(stderr, "[HTTP] Request too large: %zu bytes (max %d)\n",
                 new_size, MAX_REQUEST_SIZE);
@@ -158,16 +175,16 @@ int http_server_connection_receive(HTTPServerConnection* connection) {
     printf("[HTTP] Received %d bytes, total buffer: %zu bytes\n", bytes_read,
            connection->read_buffer_size);
 
-    // Only parse headers if we haven't found them yet
     if (connection->body_start == 0) {
+        printf("[HTTP-DEBUG] Searching for headers (body_start=0)...\n");
 
-        // CRITICAL FIX: Check if buffer has enough bytes
         if (connection->read_buffer_size < 4) {
-            // Not enough data yet to check for headers
+            printf(
+                "[HTTP-DEBUG] Buffer too small (%zu bytes), need at least 4\n",
+                connection->read_buffer_size);
             return 0;
         }
 
-        // CRITICAL FIX: Don't search beyond reasonable header size
         size_t search_limit = connection->read_buffer_size;
         if (search_limit > MAX_HEADER_SIZE) {
             fprintf(stderr, "[HTTP] Headers too large: %zu bytes (max %d)\n",
@@ -176,14 +193,16 @@ int http_server_connection_receive(HTTPServerConnection* connection) {
             return -1;
         }
 
-        // CRITICAL FIX: Use size_t and proper bounds checking
-        for (size_t i = 0; i <= search_limit - 4; i++) {
+        printf("[HTTP-DEBUG] Searching for \\r\\n\\r\\n in %zu bytes...\n",
+               search_limit);
 
-            // Checks if we have parsed all headers
+        for (size_t i = 0; i <= search_limit - 4; i++) {
             if (connection->read_buffer[i] == '\r' &&
                 connection->read_buffer[i + 1] == '\n' &&
                 connection->read_buffer[i + 2] == '\r' &&
                 connection->read_buffer[i + 3] == '\n') {
+
+                printf("[HTTP-DEBUG] Found \\r\\n\\r\\n at position %zu!\n", i);
 
                 char   method[METHOD_MAX_LEN]             = {0};
                 char   request_path[REQUEST_PATH_MAX_LEN] = {0};
@@ -215,7 +234,6 @@ int http_server_connection_receive(HTTPServerConnection* connection) {
 
                 free(headers);
 
-                // Validate content length
                 if (content_len > MAX_REQUEST_SIZE) {
                     fprintf(stderr,
                             "[HTTP] Content-Length too large: %zu bytes\n",
@@ -236,9 +254,13 @@ int http_server_connection_receive(HTTPServerConnection* connection) {
                 break;
             }
         }
+
+        if (connection->body_start == 0) {
+            printf("[HTTP-DEBUG] \\r\\n\\r\\n NOT found yet, waiting for more "
+                   "data\n");
+        }
     }
 
-    // Check if we have complete request (headers + body if any)
     if (connection->body_start > 0 &&
         connection->read_buffer_size >=
             connection->body_start + connection->content_len) {
@@ -246,7 +268,6 @@ int http_server_connection_receive(HTTPServerConnection* connection) {
         printf("[HTTP] Complete request received (%zu bytes)\n",
                connection->read_buffer_size);
 
-        // For POST/PUT methods with body
         if (connection->content_len > 0) {
             connection->body = malloc(connection->content_len);
             if (!connection->body) {
@@ -259,11 +280,13 @@ int http_server_connection_receive(HTTPServerConnection* connection) {
                    connection->content_len);
         }
 
-        // Transition to SEND state and call handler
         connection->state = HTTP_SERVER_CONNECTION_STATE_SEND;
 
+        printf("[HTTP-DEBUG] Calling onRequest handler...\n");
         if (connection->onRequest) {
             connection->onRequest(connection->context);
+        } else {
+            printf("[HTTP-DEBUG] WARNING: No onRequest handler set!\n");
         }
 
         return 0;
@@ -288,6 +311,11 @@ void http_server_connection_task_work(void* context, uint64_t mon_time) {
         http_server_connection_dispose(connection);
         break;
     }
+
+    // Prevent busy loop: add small delay to reduce CPU usage
+    // This reduces CPU from 100% to ~5% in idle state
+    // TODO: Replace with proper epoll/select event loop
+    usleep(TASK_WORK_DELAY_US);
 }
 
 void http_server_connection_dispose(HTTPServerConnection* connection) {
@@ -297,16 +325,13 @@ void http_server_connection_dispose(HTTPServerConnection* connection) {
 
     printf("[HTTP] Disposing connection (FD will be closed)\n");
 
-    // Stop and remove the task first
     if (connection->task) {
         smw_destroy_task(connection->task);
         connection->task = NULL;
     }
 
-    // Dispose TCP client (this closes the FD!)
     tcp_client_dispose(&connection->tcpClient);
 
-    // Free all dynamically allocated memory
     free(connection->read_buffer);
     connection->read_buffer = NULL;
 

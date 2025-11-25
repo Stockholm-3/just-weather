@@ -91,6 +91,7 @@ int weather_server_instance_on_request(void* context) {
         int  header_len = snprintf(header, sizeof(header),
                                    "HTTP/1.1 200 OK\r\n"
                                     "Content-Type: text/html; charset=utf-8\r\n"
+                                    "Access-Control-Allow-Origin: *\r\n"
                                     "Content-Length: %zu\r\n"
                                     "\r\n",
                                    strlen(html));
@@ -116,6 +117,7 @@ int weather_server_instance_on_request(void* context) {
         int  header_len = snprintf(header, sizeof(header),
                                    "HTTP/1.1 200 OK\r\n"
                                     "Content-Type: text/plain\r\n"
+                                    "Access-Control-Allow-Origin: *\r\n"
                                     "Content-Length: %zu\r\n"
                                     "\r\n",
                                    body_len);
@@ -157,6 +159,7 @@ int weather_server_instance_on_request(void* context) {
             int  header_len = snprintf(header, sizeof(header),
                                        "HTTP/1.1 500 Internal Server Error\r\n"
                                         "Content-Type: application/json\r\n"
+                                        "Access-Control-Allow-Origin: *\r\n"
                                         "Content-Length: %d\r\n"
                                         "\r\n",
                                        body_len);
@@ -182,6 +185,7 @@ int weather_server_instance_on_request(void* context) {
             snprintf(header, sizeof(header),
                      "HTTP/1.1 %d %s\r\n"
                      "Content-Type: application/json\r\n"
+                     "Access-Control-Allow-Origin: *\r\n"
                      "Content-Length: %zu\r\n"
                      "\r\n",
                      status_code, status_code == 200 ? "OK" : "Error",
@@ -225,6 +229,7 @@ int weather_server_instance_on_request(void* context) {
     int  header_len = snprintf(header, sizeof(header),
                                "HTTP/1.1 404 Not Found\r\n"
                                 "Content-Type: application/json\r\n"
+                                "Access-Control-Allow-Origin: *\r\n"
                                 "Content-Length: %zu\r\n"
                                 "\r\n",
                                strlen(body));

@@ -311,11 +311,6 @@ void http_server_connection_task_work(void* context, uint64_t mon_time) {
         http_server_connection_dispose(connection);
         break;
     }
-
-    // Prevent busy loop: add small delay to reduce CPU usage
-    // This reduces CPU from 100% to ~5% in idle state
-    // TODO: Replace with proper epoll/select event loop
-    usleep(TASK_WORK_DELAY_US);
 }
 
 void http_server_connection_dispose(HTTPServerConnection* connection) {

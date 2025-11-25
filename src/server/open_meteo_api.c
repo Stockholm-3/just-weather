@@ -248,52 +248,88 @@ char* open_meteo_api_build_json_response(WeatherData* data, float lat,
         return NULL;
     }
 
-    /* Generate cache filepath to load raw JSON */
-    char* cache_file = generate_cache_filepath(lat, lon);
-    if (!cache_file) {
-        fprintf(stderr, "[METEO] Failed to generate cache filepath\n");
-        return NULL;
+    // Try loading cached JSON first
+    char*   cache_file = generate_cache_filepath(lat, lon);
+    json_t* root       = NULL;
+
+    if (cache_file) {
+        json_error_t error;
+        root = json_load_file(cache_file, 0, &error);
+
+        if (!root) {
+            fprintf(stderr, "[METEO] Cache miss or invalid cache: %s\n",
+                    error.text);
+        }
+
+        free(cache_file);
     }
 
-    /* Load raw JSON from cache file */
-    json_error_t error;
-    json_t*      root = json_load_file(cache_file, 0, &error);
-    free(cache_file);
-
+    // If cache failed — build JSON object manually
     if (!root) {
-        fprintf(stderr, "[METEO] Failed to load raw JSON from cache: %s\n",
-                error.text);
-        return NULL;
+        root = json_object();
+        if (!root)
+            return NULL;
+
+        json_t* current = json_object();
+        if (!current) {
+            json_decref(root);
+            return NULL;
+        }
+
+        // Fill from WeatherData struct
+        json_object_set_new(current, "temperature",
+                            json_real(data->temperature));
+        json_object_set_new(current, "temperature_unit",
+                            json_string(data->temperature_unit));
+        json_object_set_new(current, "windspeed", json_real(data->windspeed));
+        json_object_set_new(current, "windspeed_unit",
+                            json_string(data->windspeed_unit));
+        json_object_set_new(current, "wind_direction_10m",
+                            json_integer(data->winddirection));
+        json_object_set_new(current, "weather_code",
+                            json_integer(data->weather_code));
+        json_object_set_new(current, "is_day", json_integer(data->is_day));
+        json_object_set_new(current, "precipitation",
+                            json_real(data->precipitation));
+        json_object_set_new(current, "precipitation_unit",
+                            json_string(data->precipitation_unit));
+        json_object_set_new(current, "humidity", json_real(data->humidity));
+        json_object_set_new(current, "pressure", json_real(data->pressure));
+        json_object_set_new(current, "time", json_integer(data->timestamp));
+        json_object_set_new(current, "city_name", json_string(data->city_name));
+
+        json_object_set_new(root, "current", current);
+
+        json_object_set_new(root, "latitude", json_real(data->latitude));
+        json_object_set_new(root, "longitude", json_real(data->longitude));
     }
 
-    /* Add helpful descriptions to the JSON */
+    // Enrich with descriptions (applies to both cache and fallback)
     json_t* current = json_object_get(root, "current");
     if (current) {
-        /* Add weather code description */
+        // Weather code -> description
         json_t* weather_code = json_object_get(current, "weather_code");
         if (weather_code && json_is_integer(weather_code)) {
-            int         code        = json_integer_value(weather_code);
-            const char* description = open_meteo_api_get_description(code);
+            int         wc   = json_integer_value(weather_code);
+            const char* desc = open_meteo_api_get_description(wc);
             json_object_set_new(current, "weather_description",
-                                json_string(description));
+                                json_string(desc));
         }
 
-        /* Add wind direction name */
-        json_t* wind_direction = json_object_get(current, "wind_direction_10m");
-        if (wind_direction && json_is_integer(wind_direction)) {
-            int         degrees        = json_integer_value(wind_direction);
-            const char* direction_name = get_wind_direction_name(degrees);
+        // Wind direction -> name
+        json_t* wind_deg = json_object_get(current, "wind_direction_10m");
+        if (wind_deg && json_is_integer(wind_deg)) {
+            int         deg  = json_integer_value(wind_deg);
+            const char* name = get_wind_direction_name(deg);
             json_object_set_new(current, "wind_direction_name",
-                                json_string(direction_name));
+                                json_string(name));
         }
     }
 
-    /* Convert JSON object to formatted string */
+    // Convert to string
     char* json_str = json_dumps(root, JSON_INDENT(2) | JSON_PRESERVE_ORDER);
 
-    /* Cleanup */
     json_decref(root);
-
     return json_str;
 }
 

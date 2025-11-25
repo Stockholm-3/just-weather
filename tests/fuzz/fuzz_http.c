@@ -3,6 +3,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     // 1. Initialize HTTP connection (fd = -1 means dummy socket)
@@ -11,13 +13,22 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
         return 0;
 
     // Provide stable dummy values so the server code doesn't crash
-    conn->method       = "GET";
-    conn->request_path = "/";
-    conn->host         = "localhost";
+    conn->method       = strdup("GET");
+    conn->request_path = strdup("/");
+    conn->host         = strdup("localhost");
     conn->content_len  = size;
 
-    // Feed fuzz data into the read buffer
-    conn->read_buffer      = (uint8_t*)data;
+    // Feed fuzz data into the read buffer (make an owned copy so dispose() can free it)
+    if (size > 0) {
+        conn->read_buffer = (uint8_t*)malloc(size);
+        if (!conn->read_buffer) {
+            http_server_connection_dispose_ptr(&conn);
+            return 0;
+        }
+        memcpy(conn->read_buffer, data, size);
+    } else {
+        conn->read_buffer = NULL;
+    }
     conn->read_buffer_size = size;
 
     // 2. Initialize WeatherServerInstance using official API

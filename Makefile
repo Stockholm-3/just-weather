@@ -205,15 +205,27 @@ workflow: workflow-build workflow-format
 # ------------------------------------------------------------
 # Fuzz target
 # ------------------------------------------------------------
-# Filter out main.c and open_meteo_api.c for fuzz target
-SRC_FUZZ := $(filter-out src/server/main.c src/server/open_meteo_api.c src/server/open_meteo_handler.c, $(SRC_SERVER))
+# Filter out only the server entrypoint for fuzz target (keep handlers/APIs)
+SRC_FUZZ := $(filter-out src/server/main.c, $(SRC_SERVER))
+SRC_FUZZ_STUB := $(filter-out src/server/open_meteo_api.c, $(SRC_FUZZ))
 
 .PHONY: fuzz
 fuzz:
 	@echo "Building fuzz target..."
-	clang -g -O1 -fsanitize=fuzzer,address,undefined \
+	clang $(LDFLAGS) -g -O1 -fsanitize=fuzzer,address,undefined \
 		tests/fuzz/fuzz_http.c \
 		$(SRC_FUZZ) \
 		$(JANSSON_SRC) \
 		$(CFLAGS) \
-		-o tests/fuzz/fuzz_http
+		-o tests/fuzz/fuzz_http $(LIBS)
+
+.PHONY: fuzz-stub
+fuzz-stub:
+	@echo "Building fuzz target (stubbed Open-Meteo, no libcurl)..."
+	clang $(LDFLAGS) -g -O1 -fsanitize=fuzzer,address,undefined \
+		tests/fuzz/fuzz_http.c \
+		tests/fuzz/open_meteo_stub.c \
+		$(SRC_FUZZ_STUB) \
+		$(JANSSON_SRC) \
+		$(CFLAGS) \
+		-o tests/fuzz/fuzz_http_stub

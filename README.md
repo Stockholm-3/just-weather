@@ -100,36 +100,70 @@ curl "http://stockholm3.onvo.se:81/v1/current?lat=59.33&lon=18.07"
 
 **Response Fields:**
 
-| Field                  | Type      | Description                                    |
-|------------------------|-----------|------------------------------------------------|
-| `coords.lat`           | float     | Latitude of the requested location           |
-| `coords.lon`           | float     | Longitude of the requested location          |
-| `current.temperature_c`| float     | Current temperature in Celsius               |
-| `current.wind_mps`     | float     | Current wind speed in meters per second      |
-| `current.wind_deg`     | float     | Wind direction in degrees                    |
-| `current.elevation_m`  | float     | Elevation over sea-level in meters           |
-| `current.weather_code` | integer   | Condition description (e.g sunny, cloudy etc)|
-| `updated_at`           | string    | ISO 8601 timestamp of the last update        |
+  -----------------------------------------------------------------------------------
+  Field                           Type      Description
+  ------------------------------- --------- -----------------------------------------
+  `coords.latitude`               float     Latitude of the requested location
 
-**Example Response:**  
+  `coords.longitude`              float     Longitude of the requested location
 
-- **Status Code:** `200 OK`  
-- **Content Type:** `application/json`  
+  `current.temperature`           float     Current air temperature
 
-```json
+  `current.temperature_unit`      string    Temperature unit used (e.g. °C)
+
+  `current.windspeed`             float     Wind speed
+
+  `current.windspeed_unit`        string    Wind speed unit (e.g. km/h)
+
+  `current.wind_direction_10m`    integer   Wind direction in degrees
+
+  `current.wind_direction_name`   string    Cardinal direction of the wind
+                                            (e.g. South)
+
+  `current.weather_code`          integer   Weather condition code
+
+  `current.weather_description`   string    Human-readable weather description
+
+  `current.is_day`                integer   1 if daytime, 0 if nighttime
+
+  `current.precipitation`         float     Precipitation amount
+
+  `current.precipitation_unit`    string    Precipitation measurement unit (e.g. mm)
+
+  `current.humidity`              float     Relative humidity percentage
+
+  `current.pressure`              float     Atmospheric pressure in hPa
+
+  `current.time`                  integer   UNIX timestamp of the measurement
+
+  `current.city_name`             string    Name of the location
+  -----------------------------------------------------------------------------------
+
+## Example Response
+
+``` json
 {
-  "coords": {
-    "lat": 59.33,
-    "lon": 18.07
-  },
   "current": {
-    "temperature_c": 8.5,
-    "wind_mps": 3.2,
-    "wind_deg": 133.0,
-    "elevation_m": 45.0,
-    "weather_code": 1
+    "temperature": 27.0,
+    "temperature_unit": "°C",
+    "windspeed": 17.8,
+    "windspeed_unit": "km/h",
+    "wind_direction_10m": 173,
+    "weather_code": 2,
+    "is_day": 1,
+    "precipitation": 0.0,
+    "precipitation_unit": "mm",
+    "humidity": 0.0,
+    "pressure": 1008.6,
+    "time": 1764084412,
+    "city_name": "Location (1.0000, 2.0000)",
+    "weather_description": "Partly cloudy",
+    "wind_direction_name": "South"
   },
-  "updated_at": "2025-11-04T08:00:00Z"
+  "coords": {
+    "latitude": 1.0,
+    "longitude": 2.0
+  }
 }
 ```
 

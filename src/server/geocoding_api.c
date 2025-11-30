@@ -9,6 +9,7 @@
 
 #include "hash_md5.h"
 
+#include <ctype.h>
 #include <curl/curl.h>
 #include <errno.h>
 #include <jansson.h>
@@ -56,6 +57,8 @@ static char* build_api_url(const char* city_name, const char* country,
 static int   parse_geocoding_json(const char*         json_str,
                                   GeocodingResponse** response);
 static char* url_encode(const char* str);
+static void  normalize_city_name_for_cache(const char* in, char* out,
+                                           size_t out_size);
 
 /* ============= Public API Implementation ============= */
 /**
@@ -132,15 +135,14 @@ int geocoding_api_search(const char* city_name, const char* country,
         return -1;
     }
 
-    /* Generate cache key */
+    /* Generate cache key: use only normalized city name (user requested)
+     * This makes cache files shared by city regardless of country/language
+     * or small input variations (case/whitespace).
+     */
+    char normalized[256];
+    normalize_city_name_for_cache(city_name, normalized, sizeof(normalized));
     char search_key[512];
-    if (country) {
-        snprintf(search_key, sizeof(search_key), "%s_%s_%s", city_name, country,
-                 g_config.language);
-    } else {
-        snprintf(search_key, sizeof(search_key), "%s_%s", city_name,
-                 g_config.language);
-    }
+    snprintf(search_key, sizeof(search_key), "%s", normalized);
 
     /* Generate cache file path */
     char* cache_file = generate_cache_filepath(search_key);
@@ -230,6 +232,50 @@ int geocoding_api_search(const char* city_name, const char* country,
     return 0;
 }
 
+/* Same as geocoding_api_search but do not read or write cache. This is
+ * useful for the autocomplete `/v1/cities` endpoint which shouldn't
+ * create/update the city cache. */
+int geocoding_api_search_no_cache(const char* city_name, const char* country,
+                                  GeocodingResponse** response) {
+    if (!city_name || !response)
+        return -1;
+
+    /* Directly fetch from API and return parsed results without saving */
+    int r = fetch_from_api(city_name, country, response);
+    if (r != 0) {
+        return r;
+    }
+
+    return 0;
+}
+
+/* Read-only cache search: try to load from cache, otherwise fetch but do
+ * not save to cache. This prevents endpoints like `/v1/cities` from creating
+ * new cache files while still benefiting from existing cache entries. */
+int geocoding_api_search_readonly_cache(const char*         city_name,
+                                        const char*         country,
+                                        GeocodingResponse** response) {
+    if (!city_name || !response)
+        return -1;
+    char normalized[256];
+    normalize_city_name_for_cache(city_name, normalized, sizeof(normalized));
+    char* cache_file = generate_cache_filepath(normalized);
+    if (!cache_file)
+        return -2;
+
+    /* Try load from cache if valid */
+    if (g_config.use_cache && is_cache_valid(cache_file, g_config.cache_ttl)) {
+        int r = load_from_cache(cache_file, response);
+        free(cache_file);
+        return r;
+    }
+
+    free(cache_file);
+
+    /* Cache miss: fetch from API but DO NOT save into cache */
+    return fetch_from_api(city_name, country, response);
+}
+
 int geocoding_api_search_detailed(const char* city_name, const char* region,
                                   const char*         country,
                                   GeocodingResponse** response) {
@@ -242,6 +288,17 @@ int geocoding_api_search_detailed(const char* city_name, const char* region,
 
     /* If a region is specified, filter the results */
     if (region && region[0] != '\0') {
+        /* Normalize region token: convert underscores/+ to spaces so
+         * inputs like "South_Dakota" or "South+Dakota" match "South Dakota".
+         */
+        char region_norm[128];
+        strncpy(region_norm, region, sizeof(region_norm) - 1);
+        region_norm[sizeof(region_norm) - 1] = '\0';
+        for (size_t k = 0; region_norm[k]; ++k) {
+            if (region_norm[k] == '_' || region_norm[k] == '+')
+                region_norm[k] = ' ';
+        }
+
         GeocodingResponse* filtered = malloc(sizeof(GeocodingResponse));
         if (!filtered) {
             return -1;
@@ -258,9 +315,10 @@ int geocoding_api_search_detailed(const char* city_name, const char* region,
 
         /* Filter by region */
         for (int i = 0; i < (*response)->count; i++) {
-            if (strstr((*response)->results[i].admin1, region) != NULL ||
-                strstr((*response)->results[i].admin2, region) != NULL) {
-                filtered->results[filtered->count] = (*response)->results[i];
+            GeocodingResult* r = &(*response)->results[i];
+            if ((r->admin1[0] && strcasestr(r->admin1, region_norm) != NULL) ||
+                (r->admin2[0] && strcasestr(r->admin2, region_norm) != NULL)) {
+                filtered->results[filtered->count] = *r;
                 filtered->count++;
             }
         }
@@ -289,13 +347,64 @@ int geocoding_api_search_detailed(const char* city_name, const char* region,
     return 0;
 }
 
-GeocodingResult* geocoding_api_get_best_result(GeocodingResponse* response) {
+GeocodingResult* geocoding_api_get_best_result(GeocodingResponse* response,
+                                               const char*        country) {
     if (!response || response->count == 0) {
         return NULL;
     }
 
-    /* Return the first result (API sorts by relevance) */
-    return &response->results[0];
+    /* If a country is provided, prefer results that match it. Match by
+     * country code first (case-insensitive), then by country name. If
+     * multiple matches exist, pick the one with largest population. If no
+     * match is found, fall back to the result with the largest population or
+     * the first result.
+     */
+    GeocodingResult* best = NULL;
+
+    if (country && country[0] != '\0') {
+        /* try country code match (case-insensitive) */
+        for (int i = 0; i < response->count; ++i) {
+            GeocodingResult* r = &response->results[i];
+            if (r->country_code[0] != '\0') {
+                if (strcasecmp(r->country_code, country) == 0) {
+                    if (!best || r->population > best->population) {
+                        best = r;
+                    }
+                }
+            }
+        }
+
+        /* if none by code, try matching by country name (case-insensitive
+         * substr) */
+        if (!best) {
+            for (int i = 0; i < response->count; ++i) {
+                GeocodingResult* r = &response->results[i];
+                if (r->country[0] != '\0') {
+                    if (strcasecmp(r->country, country) == 0 ||
+                        strcasestr(r->country, country) != NULL) {
+                        if (!best || r->population > best->population) {
+                            best = r;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /* If still no best, pick the highest-population result, or first as
+     * fallback */
+    if (!best) {
+        for (int i = 0; i < response->count; ++i) {
+            GeocodingResult* r = &response->results[i];
+            if (!best || r->population > best->population) {
+                best = r;
+            }
+        }
+    }
+
+    if (!best)
+        return &response->results[0];
+    return best;
 }
 
 void geocoding_api_free_response(GeocodingResponse* response) {
@@ -404,6 +513,41 @@ static char* generate_cache_filepath(const char* search_key) {
     snprintf(filepath, 512, "%s/%s.json", g_config.cache_dir, hash);
 
     return filepath;
+}
+
+/* Normalize city name for cache key: trim, lowercase, collapse spaces to
+ * underscores and remove leading/trailing underscores. This ensures that
+ * inputs like "Stockholm", "stockholm ", and "Stockholm_Sweden" map to
+ * the same cache key.
+ */
+static void normalize_city_name_for_cache(const char* in, char* out,
+                                          size_t out_size) {
+    if (!in || !out || out_size == 0)
+        return;
+
+    size_t j            = 0;
+    int    prev_was_sep = 0;
+    for (size_t i = 0; in[i] != '\0' && j + 1 < out_size; ++i) {
+        unsigned char c = (unsigned char)in[i];
+        if (c == ' ' || c == '\t' || c == '+' || c == '_') {
+            if (j == 0 || prev_was_sep)
+                continue;
+            out[j++]     = '_';
+            prev_was_sep = 1;
+        } else {
+            /* ASCII-only lowercase conversion to avoid ctype dependency */
+            if (c >= 'A' && c <= 'Z') {
+                out[j++] = (char)(c - 'A' + 'a');
+            } else {
+                out[j++] = (char)c;
+            }
+            prev_was_sep = 0;
+        }
+    }
+    /* Trim trailing underscore */
+    if (j > 0 && out[j - 1] == '_')
+        j--;
+    out[j] = '\0';
 }
 
 /**

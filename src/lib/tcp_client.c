@@ -85,13 +85,20 @@ int tcp_client_write(TCPClient* c, const uint8_t* buf, size_t len) {
 }
 
 int tcp_client_read(TCPClient* c, uint8_t* buf, size_t len) {
-    int n = recv(c->fd, buf, len, 0); // or MSG_DONTWAIT
+    /* Clear errno so we can distinguish EOF (recv==0) from previous errors */
+    errno = 0;
+    int n = recv(c->fd, buf, len, 0);
     if (n < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
             return 0; // no data available right now
         }
         return -1; // real error
     }
+
+    if (n == 0) {
+        return -2; // EOF (peer closed connection)
+    }
+
     return n;
 }
 

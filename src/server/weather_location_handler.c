@@ -136,8 +136,8 @@ int weather_location_handler_by_city(const char* query_string,
     }
 
     /* Take the best result */
-    GeocodingResult* best_location =
-        geocoding_api_get_best_result(geo_response);
+    GeocodingResult* best_location = geocoding_api_get_best_result(
+        geo_response, country[0] ? country : NULL);
     if (!best_location) {
         *response_json = build_error_response(
             "Failed to determine best location", HTTP_INTERNAL_ERROR);
@@ -273,7 +273,10 @@ int weather_location_handler_search_cities(const char* query_string,
         return -1;
     }
 
-    /* Search for cities */
+    /* Search for cities: check cache first; if missing, fetch and save.
+     * This ensures an appropriate cache file is created when needed while
+     * still using the cache when available.
+     */
     GeocodingResponse* response = NULL;
     int                result   = geocoding_api_search(query, NULL, &response);
 
@@ -389,6 +392,13 @@ static int parse_city_query(const char* query, char* city, size_t city_size,
             region[region_size - 1] = '\0';
         }
         token = strtok(NULL, "&");
+    }
+
+    /* Normalize region: replace underscores and '+' with spaces (common URL
+     * forms) */
+    for (size_t i = 0; i < region_size && region[i]; ++i) {
+        if (region[i] == '_' || region[i] == '+')
+            region[i] = ' ';
     }
 
     return found_city ? 0 : -1;

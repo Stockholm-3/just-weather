@@ -42,8 +42,12 @@ typedef struct {
     int      status_code;      // HTTP status code (200, 404, etc.)
     uint8_t* body;             // Extracted response body
 
+    /* HTTP transfer encoding support */
+    int chunked;          // Transfer-Encoding: chunked detected
+    int connection_close; // Connection: close header present
+
     TCPClient*
-         tcp_conn;      // Handle to TCP connection, är en tcp connection struct
+         tcp_conn; // Handle to TCP connection, är en tcp connection struct
     char hostname[256]; // Parsed from URL
     char path[512];     // Parsed from URL
     char port[16];      // Parsed from URL

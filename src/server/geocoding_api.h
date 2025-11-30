@@ -69,6 +69,20 @@ int geocoding_api_init(GeocodingConfig* config);
 int geocoding_api_search(const char* city_name, const char* country,
                          GeocodingResponse** response);
 
+/*
+ * Search without writing to cache. Useful for endpoints that should not
+ * create or update the shared city cache (e.g. autocomplete /cities).
+ */
+int geocoding_api_search_no_cache(const char* city_name, const char* country,
+                                  GeocodingResponse** response);
+
+/* Try to load results from cache first (read-only). If cache is missing or
+ * expired, fetch from API but do NOT save results to cache. Returns 0 on
+ * success and fills `response` (caller must free). */
+int geocoding_api_search_readonly_cache(const char*         city_name,
+                                        const char*         country,
+                                        GeocodingResponse** response);
+
 /**
  * Search for a city by name with an additional region filter
  *
@@ -91,7 +105,8 @@ int geocoding_api_search_detailed(const char* city_name, const char* region,
  * @param response Search response
  * @return Pointer to the best result or NULL
  */
-GeocodingResult* geocoding_api_get_best_result(GeocodingResponse* response);
+GeocodingResult* geocoding_api_get_best_result(GeocodingResponse* response,
+                                               const char*        country);
 
 /**
  * Free the memory for a search response

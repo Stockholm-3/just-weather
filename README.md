@@ -1,9 +1,9 @@
-# Just Weather
+![Just Weather logo](https://i.imgur.com/m6CMJxz.png)
 
-> A lightweight C weather server providing a simple HTTP REST API
+A lightweight C weather client and server providing a simple HTTP REST API
 
-Just Weather is a **network server** built as a school project at **Chas Academy (SUVX25)** by **Team Stockholm 3**.  
-It acts as a bridge between clients and [open-meteo.com](https://open-meteo.com), providing real-time weather data via a simple REST API
+>Just Weather is a **HTTP server** and a simple client targeted for ESP32, built as a school project at **Chas Academy (SUVX25)** by **Team Stockholm 3**.  
+>It acts as a bridge between clients and [open-meteo.com](https://open-meteo.com), providing real-time weather data via a simple REST API
 
 ![C](https://img.shields.io/badge/C-%2300599C.svg?style=flat&logo=c&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -32,7 +32,7 @@ It acts as a bridge between clients and [open-meteo.com](https://open-meteo.com)
 1. Clone the repository:
 ```bash
 git clone https://github.com/stockholm-3/just-weather.git
-cd etherskies
+cd just-weather
 ```
 
 2. Ensure the lib branch is cloned into ../lib:
@@ -70,9 +70,9 @@ build/<mode>/client/just-weather
 
 ## Weather API Documentation
 
-**Base URL:**  
+**Base URL:**
 ```
-TBD
+http://stockholm3.onvo.se:81/v1/
 ```
 
 ---
@@ -95,41 +95,55 @@ Retrieves the current weather data for the specified geographic coordinates.
 
 **Example Request:**  
 ```bash
-curl "http://localhost:8080/current?lat=59.33&lon=18.07"
+curl "http://stockholm3.onvo.se:81/v1/current?lat=59.33&lon=18.07"
 ```
 
 **Response Fields:**
 
-| Field                  | Type      | Description                                    |
-|------------------------|-----------|------------------------------------------------|
-| `coords.lat`           | float     | Latitude of the requested location           |
-| `coords.lon`           | float     | Longitude of the requested location          |
-| `current.temperature_c`| float     | Current temperature in Celsius               |
-| `current.wind_mps`     | float     | Current wind speed in meters per second      |
-| `current.wind_deg`     | float     | Wind direction in degrees                    |
-| `current.elevation_m`  | float     | Elevation over sea-level in meters           |
-| `current.weather_code` | integer   | Condition description (e.g sunny, cloudy etc)|
-| `updated_at`           | string    | ISO 8601 timestamp of the last update        |
+| Field                         | Type    | Description                                      |
+|-------------------------------|---------|--------------------------------------------------|
+| `coords.latitude`             | float   | Latitude of the requested location               |
+| `coords.longitude`            | float   | Longitude of the requested location              |
+| `current.temperature`         | float   | Current air temperature                          |
+| `current.temperature_unit`    | string  | Temperature unit used (e.g. °C)                  |
+| `current.windspeed`           | float   | Wind speed                                       |
+| `current.windspeed_unit`      | string  | Wind speed unit (e.g. km/h)                      |
+| `current.wind_direction_10m`  | integer | Wind direction in degrees                        |
+| `current.wind_direction_name` | string  | Cardinal direction of the wind (e.g. South)      |
+| `current.weather_code`        | integer | Weather condition code                           |
+| `current.weather_description` | string  | Human-readable weather description               |
+| `current.is_day`              | integer | 1 if daytime, 0 if nighttime                     |
+| `current.precipitation`       | float   | Precipitation amount                             |
+| `current.precipitation_unit`  | string  | Precipitation measurement unit (e.g. mm)         |
+| `current.humidity`            | float   | Relative humidity percentage                     |
+| `current.pressure`            | float   | Atmospheric pressure in hPa                      |
+| `current.time`                | integer | UNIX timestamp of the measurement                |
+| `current.city_name`           | string  | Name of the location                             |
 
-**Example Response:**  
-
-- **Status Code:** `200 OK`  
-- **Content Type:** `application/json`  
-
+## Example Response
 ```json
 {
-  "coords": {
-    "lat": 59.33,
-    "lon": 18.07
-  },
   "current": {
-    "temperature_c": 8.5,
-    "wind_mps": 3.2,
-    "wind_deg": 133.0,
-    "elevation_m": 45.0,
-    "weather_code": 1
+    "temperature": 27.0,
+    "temperature_unit": "°C",
+    "windspeed": 17.8,
+    "windspeed_unit": "km/h",
+    "wind_direction_10m": 173,
+    "weather_code": 2,
+    "is_day": 1,
+    "precipitation": 0.0,
+    "precipitation_unit": "mm",
+    "humidity": 0.0,
+    "pressure": 1008.6,
+    "time": 1764084412,
+    "city_name": "Location (1.0000, 2.0000)",
+    "weather_description": "Partly cloudy",
+    "wind_direction_name": "South"
   },
-  "updated_at": "2025-11-04T08:00:00Z"
+  "coords": {
+    "latitude": 1.0,
+    "longitude": 2.0
+  }
 }
 ```
 

@@ -30,7 +30,7 @@ CFLAGS      := $(CFLAGS_BASE) -Wall -Werror -Wfatal-errors -MMD -MP \
 JANSSON_CFLAGS := $(filter-out -Werror -Wfatal-errors,$(CFLAGS)) -w
 
 LDFLAGS     := -flto -Wl,--gc-sections
-LIBS        := -lcurl
+LIBS        := -lcurl #curl wont bes used anymore!!
 
 # ------------------------------------------------------------
 # Source and object files
@@ -128,6 +128,22 @@ run-client: $(BIN_CLIENT)
 clean:
 	@rm -rf build
 	@echo "Cleaned build artifacts."
+
+
+# ------------------------------------------------------------
+# Start server in detached tmux session
+# ------------------------------------------------------------
+.PHONY: start-server
+start-server: $(BIN_SERVER)
+	@SESSION_NAME=just-weather-server; \
+	if tmux has-session -t $$SESSION_NAME 2>/dev/null; then \
+		echo "Session '$$SESSION_NAME' already exists. Attaching..."; \
+		tmux attach -t $$SESSION_NAME; \
+	else \
+		echo "Starting server in detached tmux session '$$SESSION_NAME'..."; \
+		tmux new -d -s $$SESSION_NAME './$(BIN_SERVER)'; \
+		echo "Server started in tmux session '$$SESSION_NAME'."; \
+	fi
 
 # Show formatting errors without modifying files
 .PHONY: format

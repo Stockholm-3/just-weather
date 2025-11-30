@@ -10,7 +10,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define MAX_CLIENTS 10
+#define MAX_CLIENTS 512
 
 typedef int (*TcpServerOnAccept)(int client_fd, void* context);
 

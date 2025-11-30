@@ -1,45 +1,43 @@
-#include "HTTPClient.h"
+#include "http_client.h"
+#include "smw.h"
 
 #include <stdint.h>
 #include <stdio.h>
+#include <time.h>
 
-void custom_callback(const char* response) {
-    printf("\n\r------------HERE IS THE "
-           "RESPONE-------------\n\r%s\n\r------------END OF "
-           "RESPONSE-------------\n\r",
-           response);
+// Manual implementation of system_monotonic_ms
+uint64_t system_monotonic_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
 }
 
-int main(void) {
-    HTTPClient* http_client = NULL;
+void response_callback(const char* event, const char* response) {
+    printf("\n\r------------ HTTP CLIENT CALLBACK ------------\n\r");
+    printf("Event: %s\n\r", event);
+    if (response) {
+        printf("Response: %s\n\r", response);
+    }
+    printf("------------ END OF CALLBACK ------------\n\r");
+}
 
-    if (HTTPClient_initPtr(&http_client, -1)) {
-        perror("failed to create HTTPClient");
-        return -1;
-    };
+int main() {
+    smw_init();
 
-    // connect to localhost server
-    //     if (HTTPClient_connect(http_client, "127.0.0.1", "8080") != 0) {
-    //         perror("Connection failed");
-    //         return -1;
-    //     }
-
-    if (HTTPClient_connect(http_client, "localhost", "8080") != 0) {
-        perror("Connection failed");
+    // Use http_client_get with port parameter
+    if (http_client_get("stockholm3.onvo.se:81", 10000, response_callback,
+                        "81") != 0) {
+        perror("Failed to create HTTP client");
         return -1;
     }
 
-    // Exemple request body
-    const char* body = "{"
-                       "\"device\": \"UUID\","
-                       "\"time\": \"<time>\","
-                       "\"temperature\": \"<temperature>°C\""
-                       "}";
+    printf("HTTP client started, making request to localhost:8080...\n");
 
-    HTTPClient_Write(http_client, "/post", "POST", body);
+    // Main loop with manual timeout handling in the state machine
+    while (1) {
+        smw_work(system_monotonic_ms());
+    }
 
-    uint8_t response[4000];
-    HTTPClient_Read(http_client, response, sizeof(response), custom_callback);
-
-    HTTPClient_DisposePtr(http_client);
+    smw_dispose();
+    return 0;
 }

@@ -24,14 +24,14 @@ void response_callback(const char* event, const char* response) {
 int main() {
     smw_init();
 
-    // Use http_client_get with port parameter
-    if (http_client_get("stockholm3.onvo.se:81", 10000, response_callback,
-                        "81") != 0) {
+    // Use http_client_get with proper URL (include path); port param optional
+    if (http_client_get("http://stockholm3.onvo.se:81/", 10000,
+                        response_callback, NULL) != 0) {
         perror("Failed to create HTTP client");
         return -1;
     }
 
-    printf("HTTP client started, making request to localhost:8080...\n");
+    printf("HTTP client started, making request to stockholm3.onvo.se:81...\n");
 
     // Main loop with manual timeout handling in the state machine
     while (1) {

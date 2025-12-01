@@ -28,18 +28,34 @@ int http_client_init(const char* _URL, http_client** _ClientPtr,
         return -3;
 
     //_Client->state = http_client_state_init;
+
     _Client->task = smw_create_task(_Client, http_client_work);
 
     _Client->callback = NULL;
     _Client->timer    = 0;
+    _Client->state    = http_client_state_init;
 
-    strcpy(_Client->url, _URL);
+    /* Initialize buffers and metadata */
+    _Client->write_buffer    = NULL;
+    _Client->write_size      = 0;
+    _Client->write_offset    = 0;
+
+    _Client->read_buffer     = NULL;
+    _Client->read_buffer_size = 0;
+    _Client->body_start      = 0;
+    _Client->content_len     = 0;
+    _Client->status_code     = 0;
+    _Client->body            = NULL;
+
+    _Client->timeout = 0;
+
+    strncpy(_Client->url, _URL, http_client_max_url_length);
+    _Client->url[http_client_max_url_length] = '\0';
 
     _Client->tcp_conn    = NULL;
     _Client->hostname[0] = '\0';
     _Client->path[0]     = '\0';
     _Client->port[0]     = '\0';
-    //_Client->response[0] = '\0'; från funtion som finns i client.h
 
     *(_ClientPtr) = _Client;
 
@@ -56,6 +72,7 @@ int http_client_get(const char* _URL, uint64_t _Timeout,
 
     client->timeout  = _Timeout;
     client->callback = _Callback;
+    client->state    = http_client_state_init;
 
     return 0;
 }
@@ -335,13 +352,22 @@ http_client_state http_client_work_reading(http_client* client) {
                 printf("DEBUG: Parsed status: %d, code=%d, text=%s\n", parsed,
                        status_code, status_text);
 
-                // Parse Content-Length
+                // Parse Content-Length (case-insensitive search)
                 size_t content_len     = 0;
-                char*  content_len_ptr = strstr(headers, "Content-Length:");
+                char*  content_len_ptr = strstr(headers, "content-length:");
+                if (!content_len_ptr) {
+                    content_len_ptr = strstr(headers, "Content-Length:");
+                }
                 if (content_len_ptr) {
-                    sscanf(content_len_ptr, "Content-Length: %zu",
-                           &content_len);
-                    printf("DEBUG: Found Content-Length: %zu\n", content_len);
+                    // Skip the header name and colon
+                    const char* value_start = strchr(content_len_ptr, ':');
+                    if (value_start) {
+                        value_start++; // skip ':'
+                        while (*value_start == ' ' || *value_start == '\t')
+                            value_start++; // skip whitespace
+                        sscanf(value_start, "%zu", &content_len);
+                        printf("DEBUG: Found Content-Length: %zu\n", content_len);
+                    }
                 } else {
                     printf("DEBUG: No Content-Length header found\n");
                 }
@@ -504,8 +530,28 @@ void http_client_dispose(http_client** _ClientPtr) {
     if (_Client->task != NULL)
         smw_destroy_task(_Client->task);
 
-    free(_Client);
+    if (_Client->read_buffer) {
+        free(_Client->read_buffer);
+        _Client->read_buffer = NULL;
+    }
 
+    if (_Client->write_buffer) {
+        free(_Client->write_buffer);
+        _Client->write_buffer = NULL;
+    }
+
+    if (_Client->body) {
+        free(_Client->body);
+        _Client->body = NULL;
+    }
+
+    if (_Client->tcp_conn) {
+        tcp_client_disconnect(_Client->tcp_conn);
+        free(_Client->tcp_conn);
+        _Client->tcp_conn = NULL;
+    }
+
+    free(_Client);
     *(_ClientPtr) = NULL;
 }
 

@@ -1,6 +1,7 @@
 #include "weather_server_instance.h"
 
 #include "open_meteo_handler.h"
+#include "response_builder.h"
 #include "weather_location_handler.h"
 
 #include <stddef.h>
@@ -162,34 +163,34 @@ int weather_server_instance_on_request(void* context) {
         if (!json_response) {
             const char* reason = "Failed to fetch weather data for city";
 
-            char body[256];
-            int  body_len = snprintf(body, sizeof(body),
-                                     "{\n"
-                                      "  \"error\": \"Internal Server Error\",\n"
-                                      "  \"message\": \"%s\"\n"
-                                      "}\n",
-                                     reason);
+            char* error_json = response_builder_error(
+                HTTP_INTERNAL_ERROR,
+                response_builder_get_error_type(HTTP_INTERNAL_ERROR), reason);
+
+            if (!error_json) {
+                return -1;
+            }
 
             char header[256];
             int  header_len = snprintf(header, sizeof(header),
                                        "HTTP/1.1 500 Internal Server Error\r\n"
                                         "Content-Type: application/json\r\n"
                                         "Access-Control-Allow-Origin: *\r\n"
-                                        "Content-Length: %d\r\n"
+                                        "Content-Length: %zu\r\n"
                                         "\r\n",
-                                       body_len);
+                                       strlen(error_json));
 
-            size_t   total_len = header_len + body_len;
+            size_t   total_len = header_len + strlen(error_json);
             uint8_t* response  = malloc(total_len + 1);
             if (response) {
                 memcpy(response, header, header_len);
-                memcpy(response + header_len, body, body_len);
-                response[total_len] = '\0';
+                strcpy((char*)(response + header_len), error_json);
 
                 conn->write_buffer = response;
                 conn->write_size   = total_len;
             }
 
+            free(error_json);
             printf("[WEATHER] /v1/weather failed: %s\n", reason);
             return 0;
         }
@@ -236,34 +237,34 @@ int weather_server_instance_on_request(void* context) {
         if (!json_response) {
             const char* reason = "Failed to search cities";
 
-            char body[256];
-            int  body_len = snprintf(body, sizeof(body),
-                                     "{\n"
-                                      "  \"error\": \"Internal Server Error\",\n"
-                                      "  \"message\": \"%s\"\n"
-                                      "}\n",
-                                     reason);
+            char* error_json = response_builder_error(
+                HTTP_INTERNAL_ERROR,
+                response_builder_get_error_type(HTTP_INTERNAL_ERROR), reason);
+
+            if (!error_json) {
+                return -1;
+            }
 
             char header[256];
             int  header_len = snprintf(header, sizeof(header),
                                        "HTTP/1.1 500 Internal Server Error\r\n"
                                         "Content-Type: application/json\r\n"
                                         "Access-Control-Allow-Origin: *\r\n"
-                                        "Content-Length: %d\r\n"
+                                        "Content-Length: %zu\r\n"
                                         "\r\n",
-                                       body_len);
+                                       strlen(error_json));
 
-            size_t   total_len = header_len + body_len;
+            size_t   total_len = header_len + strlen(error_json);
             uint8_t* response  = malloc(total_len + 1);
             if (response) {
                 memcpy(response, header, header_len);
-                memcpy(response + header_len, body, body_len);
-                response[total_len] = '\0';
+                strcpy((char*)(response + header_len), error_json);
 
                 conn->write_buffer = response;
                 conn->write_size   = total_len;
             }
 
+            free(error_json);
             printf("[WEATHER] /v1/cities failed: %s\n", reason);
             return 0;
         }
@@ -308,38 +309,37 @@ int weather_server_instance_on_request(void* context) {
         open_meteo_handler_current(query, &json_response, &status_code);
 
         if (!json_response) {
-            // Provide a reason for failure
             const char* reason =
                 "Failed to fetch weather data from Open-Meteo API";
 
-            char body[256];
-            int  body_len = snprintf(body, sizeof(body),
-                                     "{\n"
-                                      "  \"error\": \"Internal Server Error\",\n"
-                                      "  \"message\": \"%s\"\n"
-                                      "}\n",
-                                     reason);
+            char* error_json = response_builder_error(
+                HTTP_INTERNAL_ERROR,
+                response_builder_get_error_type(HTTP_INTERNAL_ERROR), reason);
+
+            if (!error_json) {
+                return -1;
+            }
 
             char header[256];
             int  header_len = snprintf(header, sizeof(header),
                                        "HTTP/1.1 500 Internal Server Error\r\n"
                                         "Content-Type: application/json\r\n"
                                         "Access-Control-Allow-Origin: *\r\n"
-                                        "Content-Length: %d\r\n"
+                                        "Content-Length: %zu\r\n"
                                         "\r\n",
-                                       body_len);
+                                       strlen(error_json));
 
-            size_t   total_len = header_len + body_len;
+            size_t   total_len = header_len + strlen(error_json);
             uint8_t* response  = malloc(total_len + 1);
             if (response) {
                 memcpy(response, header, header_len);
-                memcpy(response + header_len, body, body_len);
-                response[total_len] = '\0'; // null-terminate for safety
+                strcpy((char*)(response + header_len), error_json);
 
                 conn->write_buffer = response;
                 conn->write_size   = total_len;
             }
 
+            free(error_json);
             printf("[WEATHER] /v1/current failed: %s\n", reason);
             return 0;
         }
@@ -376,23 +376,22 @@ int weather_server_instance_on_request(void* context) {
     // ==================================================================
     printf("[WEATHER] 404 Not Found: %s %s\n", conn->method, path);
 
-    const char* response_body =
-        "{\n"
-        "  \"error\": \"Not Found\",\n"
-        "  \"message\": \"The requested endpoint was not found\",\n"
-        "  \"method\": \"%s\",\n"
-        "  \"path\": \"%s\",\n"
-        "  \"available_endpoints\": [\n"
-        "    \"GET /\",\n"
-        "    \"POST /echo\",\n"
-        "    \"GET /v1/current?lat=XX&lon=YY\",\n"
-        "    \"GET /v1/weather?city=NAME&country=CODE\",\n"
-        "    \"GET /v1/cities?query=SEARCH\"\n"
-        "  ]\n"
-        "}\n";
+    char detailed_msg[512];
+    snprintf(detailed_msg, sizeof(detailed_msg),
+             "The requested endpoint '%s %s' was not found. "
+             "Available endpoints: GET /, POST /echo, "
+             "GET /v1/current?lat=XX&lon=YY, "
+             "GET /v1/weather?city=NAME&country=CODE, "
+             "GET /v1/cities?query=SEARCH",
+             conn->method, path);
 
-    char body[1024];
-    snprintf(body, sizeof(body), response_body, conn->method, path);
+    char* json_response = response_builder_error(
+        HTTP_NOT_FOUND, response_builder_get_error_type(HTTP_NOT_FOUND),
+        detailed_msg);
+
+    if (!json_response) {
+        return -1;
+    }
 
     char header[256];
     int  header_len = snprintf(header, sizeof(header),
@@ -401,20 +400,20 @@ int weather_server_instance_on_request(void* context) {
                                 "Access-Control-Allow-Origin: *\r\n"
                                 "Content-Length: %zu\r\n"
                                 "\r\n",
-                               strlen(body));
+                               strlen(json_response));
 
-    size_t   total_len = header_len + strlen(body);
+    size_t   total_len = header_len + strlen(json_response);
     uint8_t* response  = malloc(total_len + 1);
 
     if (response) {
         memcpy(response, header, header_len);
-        strcpy((char*)response + header_len, body);
+        strcpy((char*)response + header_len, json_response);
 
         conn->write_buffer = response;
         conn->write_size   = total_len;
-        return 0;
     }
 
+    free(json_response);
     return 0;
 }
 

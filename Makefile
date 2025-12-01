@@ -149,12 +149,15 @@ start-server: $(BIN_SERVER)
 .PHONY: format
 format:
 	@echo "Checking formatting..."
-	@unformatted=$$(find . \( -name '*.c' -o -name '*.h' \) -print0 | \
+	@unformatted=$$( \
+		{ find src \( -name '*.c' -o -name '*.h' \) ! -path "*/jansson/*" -print0; \
+		  find includes -name '*.h' ! -name 'jansson*' -print0 2>/dev/null || true; } | \
 		xargs -0 clang-format -style=file -output-replacements-xml | \
 		grep -c "<replacement " || true); \
 	if [ $$unformatted -ne 0 ]; then \
 		echo "$$unformatted file(s) need formatting"; \
-		find . \( -name '*.c' -o -name '*.h' \) -print0 | \
+		{ find src \( -name '*.c' -o -name '*.h' \) ! -path "*/jansson/*" -print0; \
+		  find includes -name '*.h' ! -name 'jansson*' -print0 2>/dev/null || true; } | \
 		xargs -0 clang-format -style=file -n -Werror; \
 		exit 1; \
 	else \
@@ -165,7 +168,9 @@ format:
 .PHONY: format-fix
 format-fix:
 	@echo "Applying clang-format..."
-	find . \( -name '*.c' -o -name '*.h' \) -print0 | xargs -0 clang-format -i -style=file
+	@{ find src \( -name '*.c' -o -name '*.h' \) ! -path "*/jansson/*" -print0; \
+	   find includes -name '*.h' ! -name 'jansson*' -print0 2>/dev/null || true; } | \
+		xargs -0 clang-format -i -style=file
 	@echo "Formatting applied."
 
 .PHONY: lint

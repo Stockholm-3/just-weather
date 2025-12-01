@@ -64,6 +64,9 @@ void open_meteo_api_cleanup(void);
 /* Get weather description from code */
 const char* open_meteo_api_get_description(int weather_code);
 
+/* Get wind direction name from degrees (North, South-Southeast, etc.) */
+const char* open_meteo_api_get_wind_direction(int degrees);
+
 /* Build JSON response for HTTP */
 char* open_meteo_api_build_json_response(WeatherData* data, float lat,
                                          float lon);

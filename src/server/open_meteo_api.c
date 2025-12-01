@@ -46,7 +46,6 @@ static int   fetch_weather_from_api(Location* location, WeatherData** data);
 static char* build_api_url(float lat, float lon);
 static int   parse_weather_json(const char* json_str, WeatherData* data,
                                 float lat, float lon);
-static const char* get_wind_direction_name(int degrees);
 
 /* ============= Weather Code Descriptions ============= */
 
@@ -81,7 +80,7 @@ static const struct {
 
 /* ============= Wind Direction Cardinal ============= */
 
-static const char* get_wind_direction_name(int degrees) {
+const char* open_meteo_api_get_wind_direction(int degrees) {
     degrees = degrees % 360;
     if (degrees < 0)
         degrees += 360;
@@ -337,8 +336,9 @@ char* open_meteo_api_build_json_response(WeatherData* data, float lat,
         json_t* wind_direction = json_object_get(current, "wind_direction_10m");
         if (wind_direction && json_is_integer(wind_direction)) {
             int degrees = json_integer_value(wind_direction);
-            json_object_set_new(current, "wind_direction_name",
-                                json_string(get_wind_direction_name(degrees)));
+            json_object_set_new(
+                current, "wind_direction_name",
+                json_string(open_meteo_api_get_wind_direction(degrees)));
         }
     }
 
@@ -468,6 +468,23 @@ static int load_weather_from_cache(const char* filepath, WeatherData** data) {
     if (is_day)
         (*data)->is_day = json_integer_value(is_day);
 
+    /* Parse units */
+    json_t* temp_unit = json_object_get(current_units, "temperature_2m");
+    if (temp_unit && json_is_string(temp_unit)) {
+        strncpy((*data)->temperature_unit, json_string_value(temp_unit),
+                sizeof((*data)->temperature_unit) - 1);
+    } else {
+        strcpy((*data)->temperature_unit, "°C");
+    }
+
+    json_t* wind_unit = json_object_get(current_units, "wind_speed_10m");
+    if (wind_unit && json_is_string(wind_unit)) {
+        strncpy((*data)->windspeed_unit, json_string_value(wind_unit),
+                sizeof((*data)->windspeed_unit) - 1);
+    } else {
+        strcpy((*data)->windspeed_unit, "km/h");
+    }
+
     (*data)->timestamp = time(NULL);
 
     json_t* latitude  = json_object_get(root, "latitude");
@@ -529,7 +546,9 @@ static int parse_weather_json(const char* json_str, WeatherData* data,
         return -1;
     }
 
-    json_t* current = json_object_get(root, "current");
+    json_t* current       = json_object_get(root, "current");
+    json_t* current_units = json_object_get(root, "current_units");
+
     if (!current) {
         json_decref(root);
         return -2;
@@ -567,6 +586,28 @@ static int parse_weather_json(const char* json_str, WeatherData* data,
     json_t* is_day = json_object_get(current, "is_day");
     if (is_day)
         data->is_day = json_integer_value(is_day);
+
+    /* Parse units */
+    if (current_units) {
+        json_t* temp_unit = json_object_get(current_units, "temperature_2m");
+        if (temp_unit && json_is_string(temp_unit)) {
+            strncpy(data->temperature_unit, json_string_value(temp_unit),
+                    sizeof(data->temperature_unit) - 1);
+        } else {
+            strcpy(data->temperature_unit, "°C");
+        }
+
+        json_t* wind_unit = json_object_get(current_units, "wind_speed_10m");
+        if (wind_unit && json_is_string(wind_unit)) {
+            strncpy(data->windspeed_unit, json_string_value(wind_unit),
+                    sizeof(data->windspeed_unit) - 1);
+        } else {
+            strcpy(data->windspeed_unit, "km/h");
+        }
+    } else {
+        strcpy(data->temperature_unit, "°C");
+        strcpy(data->windspeed_unit, "km/h");
+    }
 
     data->timestamp = time(NULL);
     data->latitude  = lat;

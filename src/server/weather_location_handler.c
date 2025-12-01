@@ -7,27 +7,21 @@
 #include "geocoding_api.h"
 #include "open_meteo_api.h"
 #include "open_meteo_handler.h"
+#include "response_builder.h"
 
 #include <jansson.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-/* HTTP status codes */
-#define HTTP_OK 200
-#define HTTP_BAD_REQUEST 400
-#define HTTP_NOT_FOUND 404
-#define HTTP_INTERNAL_ERROR 500
-
 /* Global state for lazy initialization */
 static bool g_initialized = false;
 
 /* Internal functions */
-static char* build_error_response(const char* error_msg, int code);
-static int   parse_city_query(const char* query, char* city, size_t city_size,
-                              char* country, size_t country_size, char* region,
-                              size_t region_size);
-static int   ensure_initialized(void);
+static int parse_city_query(const char* query, char* city, size_t city_size,
+                            char* country, size_t country_size, char* region,
+                            size_t region_size);
+static int ensure_initialized(void);
 
 /* ============= Lazy Initialization ============= */
 
@@ -77,8 +71,10 @@ int weather_location_handler_by_city(const char* query_string,
 
     /* Automatic initialization on first call */
     if (ensure_initialized() != 0) {
-        *response_json = build_error_response(
-            "Failed to initialize geocoding module", HTTP_INTERNAL_ERROR);
+        *response_json = response_builder_error(
+            HTTP_INTERNAL_ERROR,
+            response_builder_get_error_type(HTTP_INTERNAL_ERROR),
+            "Failed to initialize geocoding module");
         *status_code = HTTP_INTERNAL_ERROR;
         return -1;
     }
@@ -93,16 +89,17 @@ int weather_location_handler_by_city(const char* query_string,
 
     if (parse_city_query(query_string, city, sizeof(city), country,
                          sizeof(country), region, sizeof(region)) != 0) {
-        *response_json = build_error_response(
-            "Invalid query parameters. Expected: city=<name>&country=<code>",
-            HTTP_BAD_REQUEST);
+        *response_json = response_builder_error(
+            HTTP_BAD_REQUEST, response_builder_get_error_type(HTTP_BAD_REQUEST),
+            "Invalid query parameters. Expected: city=<name>&country=<code>");
         *status_code = HTTP_BAD_REQUEST;
         return -1;
     }
 
     if (city[0] == '\0') {
-        *response_json = build_error_response(
-            "Missing required parameter: city", HTTP_BAD_REQUEST);
+        *response_json = response_builder_error(
+            HTTP_BAD_REQUEST, response_builder_get_error_type(HTTP_BAD_REQUEST),
+            "Missing required parameter: city");
         *status_code = HTTP_BAD_REQUEST;
         return -1;
     }
@@ -126,8 +123,10 @@ int weather_location_handler_by_city(const char* query_string,
     if (result != 0 || !geo_response || geo_response->count == 0) {
         char error_msg[256];
         snprintf(error_msg, sizeof(error_msg), "City not found: %s", city);
-        *response_json = build_error_response(error_msg, HTTP_NOT_FOUND);
-        *status_code   = HTTP_NOT_FOUND;
+        *response_json = response_builder_error(
+            HTTP_NOT_FOUND, response_builder_get_error_type(HTTP_NOT_FOUND),
+            error_msg);
+        *status_code = HTTP_NOT_FOUND;
 
         if (geo_response) {
             geocoding_api_free_response(geo_response);
@@ -139,8 +138,10 @@ int weather_location_handler_by_city(const char* query_string,
     GeocodingResult* best_location = geocoding_api_get_best_result(
         geo_response, country[0] ? country : NULL);
     if (!best_location) {
-        *response_json = build_error_response(
-            "Failed to determine best location", HTTP_INTERNAL_ERROR);
+        *response_json = response_builder_error(
+            HTTP_INTERNAL_ERROR,
+            response_builder_get_error_type(HTTP_INTERNAL_ERROR),
+            "Failed to determine best location");
         *status_code = HTTP_INTERNAL_ERROR;
         geocoding_api_free_response(geo_response);
         return -1;
@@ -159,15 +160,17 @@ int weather_location_handler_by_city(const char* query_string,
     result = open_meteo_api_get_current(&location, &weather_data);
 
     if (result != 0 || !weather_data) {
-        *response_json = build_error_response("Failed to fetch weather data",
-                                              HTTP_INTERNAL_ERROR);
-        *status_code   = HTTP_INTERNAL_ERROR;
+        *response_json = response_builder_error(
+            HTTP_INTERNAL_ERROR,
+            response_builder_get_error_type(HTTP_INTERNAL_ERROR),
+            "Failed to fetch weather data");
+        *status_code = HTTP_INTERNAL_ERROR;
         geocoding_api_free_response(geo_response);
         return -1;
     }
 
     /* 3. Build JSON response with city and weather information */
-    json_t* root = json_object();
+    json_t* data = json_object();
 
     /* Add location information */
     json_t* location_obj = json_object();
@@ -197,7 +200,7 @@ int weather_location_handler_by_city(const char* query_string,
                             json_string(best_location->timezone));
     }
 
-    json_object_set_new(root, "location", location_obj);
+    json_object_set_new(data, "location", location_obj);
 
     /* Add weather data */
     json_t* weather_obj = json_object();
@@ -216,6 +219,9 @@ int weather_location_handler_by_city(const char* query_string,
                         json_string(weather_data->windspeed_unit));
     json_object_set_new(weather_obj, "winddirection",
                         json_integer(weather_data->winddirection));
+    json_object_set_new(weather_obj, "winddirection_name",
+                        json_string(open_meteo_api_get_wind_direction(
+                            weather_data->winddirection)));
     json_object_set_new(weather_obj, "humidity",
                         json_real(weather_data->humidity));
     json_object_set_new(weather_obj, "pressure",
@@ -225,17 +231,17 @@ int weather_location_handler_by_city(const char* query_string,
     json_object_set_new(weather_obj, "is_day",
                         json_boolean(weather_data->is_day));
 
-    json_object_set_new(root, "current_weather", weather_obj);
+    json_object_set_new(data, "current_weather", weather_obj);
 
-    /* Convert to string */
-    *response_json = json_dumps(root, JSON_INDENT(2) | JSON_PRESERVE_ORDER);
-
-    /* Cleanup */
-    json_decref(root);
+    /* Cleanup weather data */
     open_meteo_api_free_current(weather_data);
     geocoding_api_free_response(geo_response);
 
+    /* Build standardized response */
+    *response_json = response_builder_success(data);
+
     if (!*response_json) {
+        json_decref(data);
         *status_code = HTTP_INTERNAL_ERROR;
         return -1;
     }
@@ -254,8 +260,10 @@ int weather_location_handler_search_cities(const char* query_string,
 
     /* Automatic initialization on first call */
     if (ensure_initialized() != 0) {
-        *response_json = build_error_response(
-            "Failed to initialize geocoding module", HTTP_INTERNAL_ERROR);
+        *response_json = response_builder_error(
+            HTTP_INTERNAL_ERROR,
+            response_builder_get_error_type(HTTP_INTERNAL_ERROR),
+            "Failed to initialize geocoding module");
         *status_code = HTTP_INTERNAL_ERROR;
         return -1;
     }
@@ -267,8 +275,9 @@ int weather_location_handler_search_cities(const char* query_string,
     char query[256] = {0};
     if (sscanf(query_string, "query=%255[^&]", query) != 1 ||
         query[0] == '\0') {
-        *response_json = build_error_response(
-            "Missing required parameter: query", HTTP_BAD_REQUEST);
+        *response_json = response_builder_error(
+            HTTP_BAD_REQUEST, response_builder_get_error_type(HTTP_BAD_REQUEST),
+            "Missing required parameter: query");
         *status_code = HTTP_BAD_REQUEST;
         return -1;
     }
@@ -281,16 +290,18 @@ int weather_location_handler_search_cities(const char* query_string,
     int                result   = geocoding_api_search(query, NULL, &response);
 
     if (result != 0 || !response) {
-        *response_json = build_error_response("Failed to search cities",
-                                              HTTP_INTERNAL_ERROR);
-        *status_code   = HTTP_INTERNAL_ERROR;
+        *response_json = response_builder_error(
+            HTTP_INTERNAL_ERROR,
+            response_builder_get_error_type(HTTP_INTERNAL_ERROR),
+            "Failed to search cities");
+        *status_code = HTTP_INTERNAL_ERROR;
         return -1;
     }
 
     /* Build JSON response */
-    json_t* root = json_object();
-    json_object_set_new(root, "query", json_string(query));
-    json_object_set_new(root, "count", json_integer(response->count));
+    json_t* data = json_object();
+    json_object_set_new(data, "query", json_string(query));
+    json_object_set_new(data, "count", json_integer(response->count));
 
     json_t* cities_array = json_array();
     for (int i = 0; i < response->count; i++) {
@@ -317,14 +328,15 @@ int weather_location_handler_search_cities(const char* query_string,
         json_array_append_new(cities_array, city_obj);
     }
 
-    json_object_set_new(root, "cities", cities_array);
+    json_object_set_new(data, "cities", cities_array);
 
-    *response_json = json_dumps(root, JSON_INDENT(2) | JSON_PRESERVE_ORDER);
-
-    json_decref(root);
     geocoding_api_free_response(response);
 
+    /* Build standardized response */
+    *response_json = response_builder_success(data);
+
     if (!*response_json) {
+        json_decref(data);
         *status_code = HTTP_INTERNAL_ERROR;
         return -1;
     }
@@ -345,23 +357,6 @@ void weather_location_handler_cleanup(void) {
 }
 
 /* ============= Internal Functions ============= */
-
-static char* build_error_response(const char* error_msg, int code) {
-    char* json = malloc(512);
-    if (!json) {
-        return NULL;
-    }
-
-    snprintf(json, 512,
-             "{\n"
-             "  \"error\": true,\n"
-             "  \"code\": %d,\n"
-             "  \"message\": \"%s\"\n"
-             "}",
-             code, error_msg ? error_msg : "Unknown error");
-
-    return json;
-}
 
 static int parse_city_query(const char* query, char* city, size_t city_size,
                             char* country, size_t country_size, char* region,

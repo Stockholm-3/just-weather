@@ -13,15 +13,17 @@ static void free_cache_entry(CacheEntry* entry) {
 
 // Helper function to check if an entry is expired
 static int is_expired(CacheEntry* entry) {
-    if (!entry)
+    if (!entry) {
         return 1;
+    }
     return (time(NULL) > entry->expiry);
 }
 
 Cache* cache_create(size_t max_size, time_t default_ttl) {
     Cache* cache = (Cache*)malloc(sizeof(Cache));
-    if (!cache)
+    if (!cache) {
         return NULL;
+    }
 
     cache->entries = linked_list_create();
     if (!cache->entries) {
@@ -35,8 +37,9 @@ Cache* cache_create(size_t max_size, time_t default_ttl) {
 }
 
 void cache_destroy(Cache* cache) {
-    if (!cache)
+    if (!cache) {
         return;
+    }
     linked_list_clear(cache->entries, (void (*)(void*))free_cache_entry);
     linked_list_dispose(&cache->entries, NULL);
     free(cache);
@@ -44,8 +47,9 @@ void cache_destroy(Cache* cache) {
 
 int cache_set(Cache* cache, const char* key, void* data, size_t data_size,
               time_t ttl) {
-    if (!cache || !key || !data)
+    if (!cache || !key || !data) {
         return -1;
+    }
 
     // Remove existing entry if it exists
     cache_remove(cache, key);
@@ -61,8 +65,9 @@ int cache_set(Cache* cache, const char* key, void* data, size_t data_size,
 
     // Create new entry
     CacheEntry* entry = (CacheEntry*)malloc(sizeof(CacheEntry));
-    if (!entry)
+    if (!entry) {
         return -1;
+    }
 
     entry->key  = strdup(key);
     entry->data = malloc(data_size);
@@ -86,8 +91,9 @@ int cache_set(Cache* cache, const char* key, void* data, size_t data_size,
 }
 
 void* cache_get(Cache* cache, const char* key, size_t* data_size) {
-    if (!cache || !key)
+    if (!cache || !key) {
         return NULL;
+    }
 
     LinkedList_foreach(cache->entries, node) {
         CacheEntry* entry = (CacheEntry*)node->item;
@@ -96,8 +102,9 @@ void* cache_get(Cache* cache, const char* key, size_t* data_size) {
                 cache_remove(cache, key);
                 return NULL;
             }
-            if (data_size)
+            if (data_size) {
                 *data_size = entry->data_size;
+            }
             void* data_copy = malloc(entry->data_size);
             if (data_copy) {
                 memcpy(data_copy, entry->data, entry->data_size);
@@ -110,8 +117,9 @@ void* cache_get(Cache* cache, const char* key, size_t* data_size) {
 }
 
 void cache_remove(Cache* cache, const char* key) {
-    if (!cache || !key)
+    if (!cache || !key) {
         return;
+    }
 
     size_t index = 0;
     LinkedList_foreach(cache->entries, node) {
@@ -126,7 +134,8 @@ void cache_remove(Cache* cache, const char* key) {
 }
 
 void cache_clear(Cache* cache) {
-    if (!cache)
+    if (!cache) {
         return;
+    }
     linked_list_clear(cache->entries, (void (*)(void*))free_cache_entry);
 }

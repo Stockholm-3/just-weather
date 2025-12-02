@@ -201,15 +201,19 @@ int geocoding_api_search(const char* city_name, const char* country,
             json_object_set_new(item, "country", json_string(r->country));
             json_object_set_new(item, "country_code",
                                 json_string(r->country_code));
-            if (r->admin1[0])
+            if (r->admin1[0]) {
                 json_object_set_new(item, "admin1", json_string(r->admin1));
-            if (r->admin2[0])
+            }
+            if (r->admin2[0]) {
                 json_object_set_new(item, "admin2", json_string(r->admin2));
-            if (r->population > 0)
+            }
+            if (r->population > 0) {
                 json_object_set_new(item, "population",
                                     json_integer(r->population));
-            if (r->timezone[0])
+            }
+            if (r->timezone[0]) {
                 json_object_set_new(item, "timezone", json_string(r->timezone));
+            }
 
             json_array_append_new(results_array, item);
         }
@@ -237,8 +241,9 @@ int geocoding_api_search(const char* city_name, const char* country,
  * create/update the city cache. */
 int geocoding_api_search_no_cache(const char* city_name, const char* country,
                                   GeocodingResponse** response) {
-    if (!city_name || !response)
+    if (!city_name || !response) {
         return -1;
+    }
 
     /* Directly fetch from API and return parsed results without saving */
     int r = fetch_from_api(city_name, country, response);
@@ -255,13 +260,15 @@ int geocoding_api_search_no_cache(const char* city_name, const char* country,
 int geocoding_api_search_readonly_cache(const char*         city_name,
                                         const char*         country,
                                         GeocodingResponse** response) {
-    if (!city_name || !response)
+    if (!city_name || !response) {
         return -1;
+    }
     char normalized[256];
     normalize_city_name_for_cache(city_name, normalized, sizeof(normalized));
     char* cache_file = generate_cache_filepath(normalized);
-    if (!cache_file)
+    if (!cache_file) {
         return -2;
+    }
 
     /* Try load from cache if valid */
     if (g_config.use_cache && is_cache_valid(cache_file, g_config.cache_ttl)) {
@@ -295,8 +302,9 @@ int geocoding_api_search_detailed(const char* city_name, const char* region,
         strncpy(region_norm, region, sizeof(region_norm) - 1);
         region_norm[sizeof(region_norm) - 1] = '\0';
         for (size_t k = 0; region_norm[k]; ++k) {
-            if (region_norm[k] == '_' || region_norm[k] == '+')
+            if (region_norm[k] == '_' || region_norm[k] == '+') {
                 region_norm[k] = ' ';
+            }
         }
 
         GeocodingResponse* filtered = malloc(sizeof(GeocodingResponse));
@@ -402,8 +410,9 @@ GeocodingResult* geocoding_api_get_best_result(GeocodingResponse* response,
         }
     }
 
-    if (!best)
+    if (!best) {
         return &response->results[0];
+    }
     return best;
 }
 
@@ -553,16 +562,18 @@ static char* generate_cache_filepath(const char* search_key) {
  */
 static void normalize_city_name_for_cache(const char* in, char* out,
                                           size_t out_size) {
-    if (!in || !out || out_size == 0)
+    if (!in || !out || out_size == 0) {
         return;
+    }
 
     size_t j            = 0;
     int    prev_was_sep = 0;
     for (size_t i = 0; in[i] != '\0' && j + 1 < out_size; ++i) {
         unsigned char c = (unsigned char)in[i];
         if (c == ' ' || c == '\t' || c == '+' || c == '_') {
-            if (j == 0 || prev_was_sep)
+            if (j == 0 || prev_was_sep) {
                 continue;
+            }
             out[j++]     = '_';
             prev_was_sep = 1;
         } else {
@@ -576,8 +587,9 @@ static void normalize_city_name_for_cache(const char* in, char* out,
         }
     }
     /* Trim trailing underscore */
-    if (j > 0 && out[j - 1] == '_')
+    if (j > 0 && out[j - 1] == '_') {
         j--;
+    }
     out[j] = '\0';
 }
 
@@ -668,8 +680,9 @@ static int url_encode_char(const char* src, int src_len, char* dst,
         } else if (c == ' ') {
             dst[dst_pos++] = '+';
         } else {
-            if (dst_pos + 2 >= dst_size)
+            if (dst_pos + 2 >= dst_size) {
                 break;
+            }
             dst_pos += snprintf(dst + dst_pos, dst_size - dst_pos, "%%%02X", c);
         }
     }
@@ -775,21 +788,27 @@ static int parse_geocoding_json(const char*         json_str,
         json_t* country_name = json_object_get(item, "country");
         json_t* country_code = json_object_get(item, "country_code");
 
-        if (id)
+        if (id) {
             result->id = json_integer_value(id);
-        if (name)
+        }
+        if (name) {
             strncpy(result->name, json_string_value(name),
                     sizeof(result->name) - 1);
-        if (lat)
+        }
+        if (lat) {
             result->latitude = json_real_value(lat);
-        if (lon)
+        }
+        if (lon) {
             result->longitude = json_real_value(lon);
-        if (country_name)
+        }
+        if (country_name) {
             strncpy(result->country, json_string_value(country_name),
                     sizeof(result->country) - 1);
-        if (country_code)
+        }
+        if (country_code) {
             strncpy(result->country_code, json_string_value(country_code),
                     sizeof(result->country_code) - 1);
+        }
 
         /* Optional fields */
         json_t* admin1     = json_object_get(item, "admin1");
@@ -797,17 +816,21 @@ static int parse_geocoding_json(const char*         json_str,
         json_t* population = json_object_get(item, "population");
         json_t* timezone   = json_object_get(item, "timezone");
 
-        if (admin1)
+        if (admin1) {
             strncpy(result->admin1, json_string_value(admin1),
                     sizeof(result->admin1) - 1);
-        if (admin2)
+        }
+        if (admin2) {
             strncpy(result->admin2, json_string_value(admin2),
                     sizeof(result->admin2) - 1);
-        if (population)
+        }
+        if (population) {
             result->population = json_integer_value(population);
-        if (timezone)
+        }
+        if (timezone) {
             strncpy(result->timezone, json_string_value(timezone),
                     sizeof(result->timezone) - 1);
+        }
     }
 
     json_decref(root);

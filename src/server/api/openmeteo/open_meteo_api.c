@@ -52,7 +52,7 @@ static int   parse_weather_json(const char* json_str, WeatherData* data,
 static const struct {
     int         code;
     const char* description;
-} weather_descriptions[] = {{0, "Clear sky"},
+} WEATHER_DESCRIPTIONS[] = {{0, "Clear sky"},
                             {1, "Mainly clear"},
                             {2, "Partly cloudy"},
                             {3, "Overcast"},
@@ -82,41 +82,43 @@ static const struct {
 
 const char* open_meteo_api_get_wind_direction(int degrees) {
     degrees = degrees % 360;
-    if (degrees < 0)
+    if (degrees < 0) {
         degrees += 360;
+    }
 
-    if (degrees >= 348.75 || degrees < 11.25)
+    if (degrees >= 348.75 || degrees < 11.25) {
         return "North";
-    else if (degrees < 33.75)
+    } else if (degrees < 33.75) {
         return "North-Northeast";
-    else if (degrees < 56.25)
+    } else if (degrees < 56.25) {
         return "Northeast";
-    else if (degrees < 78.75)
+    } else if (degrees < 78.75) {
         return "East-Northeast";
-    else if (degrees < 101.25)
+    } else if (degrees < 101.25) {
         return "East";
-    else if (degrees < 123.75)
+    } else if (degrees < 123.75) {
         return "East-Southeast";
-    else if (degrees < 146.25)
+    } else if (degrees < 146.25) {
         return "Southeast";
-    else if (degrees < 168.75)
+    } else if (degrees < 168.75) {
         return "South-Southeast";
-    else if (degrees < 191.25)
+    } else if (degrees < 191.25) {
         return "South";
-    else if (degrees < 213.75)
+    } else if (degrees < 213.75) {
         return "South-Southwest";
-    else if (degrees < 236.25)
+    } else if (degrees < 236.25) {
         return "Southwest";
-    else if (degrees < 258.75)
+    } else if (degrees < 258.75) {
         return "West-Southwest";
-    else if (degrees < 281.25)
+    } else if (degrees < 281.25) {
         return "West";
-    else if (degrees < 303.75)
+    } else if (degrees < 303.75) {
         return "North-Northwest";
-    else if (degrees < 326.25)
+    } else if (degrees < 326.25) {
         return "Northwest";
-    else
+    } else {
         return "North-Northwest";
+    }
 }
 
 /* ============= Helper Functions ============= */
@@ -292,14 +294,14 @@ void open_meteo_api_cleanup(void) { printf("[METEO] API cleaned up\n"); }
 
 const char* open_meteo_api_get_description(int weather_code) {
     for (size_t i = 0;
-         i < sizeof(weather_descriptions) / sizeof(weather_descriptions[0]) - 1;
+         i < sizeof(WEATHER_DESCRIPTIONS) / sizeof(WEATHER_DESCRIPTIONS[0]) - 1;
          i++) {
-        if (weather_descriptions[i].code == weather_code) {
-            return weather_descriptions[i].description;
+        if (WEATHER_DESCRIPTIONS[i].code == weather_code) {
+            return WEATHER_DESCRIPTIONS[i].description;
         }
     }
-    return weather_descriptions[sizeof(weather_descriptions) /
-                                    sizeof(weather_descriptions[0]) -
+    return WEATHER_DESCRIPTIONS[sizeof(WEATHER_DESCRIPTIONS) /
+                                    sizeof(WEATHER_DESCRIPTIONS[0]) -
                                 1]
         .description;
 }
@@ -437,36 +439,44 @@ static int load_weather_from_cache(const char* filepath, WeatherData** data) {
 
     // Parse all weather data fields
     json_t* temp = json_object_get(current, "temperature_2m");
-    if (temp)
+    if (temp) {
         (*data)->temperature = json_real_value(temp);
+    }
 
     json_t* windspeed = json_object_get(current, "wind_speed_10m");
-    if (windspeed)
+    if (windspeed) {
         (*data)->windspeed = json_real_value(windspeed);
+    }
 
     json_t* winddirection = json_object_get(current, "wind_direction_10m");
-    if (winddirection)
+    if (winddirection) {
         (*data)->winddirection = json_integer_value(winddirection);
+    }
 
     json_t* precipitation = json_object_get(current, "precipitation");
-    if (precipitation)
+    if (precipitation) {
         (*data)->precipitation = json_real_value(precipitation);
+    }
 
     json_t* humidity = json_object_get(current, "relative_humidity_2m");
-    if (humidity)
+    if (humidity) {
         (*data)->humidity = json_real_value(humidity);
+    }
 
     json_t* pressure = json_object_get(current, "surface_pressure");
-    if (pressure)
+    if (pressure) {
         (*data)->pressure = json_real_value(pressure);
+    }
 
     json_t* weather_code = json_object_get(current, "weather_code");
-    if (weather_code)
+    if (weather_code) {
         (*data)->weather_code = json_integer_value(weather_code);
+    }
 
     json_t* is_day = json_object_get(current, "is_day");
-    if (is_day)
+    if (is_day) {
         (*data)->is_day = json_integer_value(is_day);
+    }
 
     /* Parse units */
     json_t* temp_unit = json_object_get(current_units, "temperature_2m");
@@ -490,10 +500,12 @@ static int load_weather_from_cache(const char* filepath, WeatherData** data) {
     json_t* latitude  = json_object_get(root, "latitude");
     json_t* longitude = json_object_get(root, "longitude");
 
-    if (latitude)
+    if (latitude) {
         (*data)->latitude = json_real_value(latitude);
-    if (longitude)
+    }
+    if (longitude) {
         (*data)->longitude = json_real_value(longitude);
+    }
 
     json_decref(root);
     return 0;
@@ -556,36 +568,44 @@ static int parse_weather_json(const char* json_str, WeatherData* data,
 
     // Parse all fields
     json_t* temp = json_object_get(current, "temperature_2m");
-    if (temp)
+    if (temp) {
         data->temperature = json_real_value(temp);
+    }
 
     json_t* windspeed = json_object_get(current, "wind_speed_10m");
-    if (windspeed)
+    if (windspeed) {
         data->windspeed = json_real_value(windspeed);
+    }
 
     json_t* winddirection = json_object_get(current, "wind_direction_10m");
-    if (winddirection)
+    if (winddirection) {
         data->winddirection = json_integer_value(winddirection);
+    }
 
     json_t* precipitation = json_object_get(current, "precipitation");
-    if (precipitation)
+    if (precipitation) {
         data->precipitation = json_real_value(precipitation);
+    }
 
     json_t* humidity = json_object_get(current, "relative_humidity_2m");
-    if (humidity)
+    if (humidity) {
         data->humidity = json_real_value(humidity);
+    }
 
     json_t* pressure = json_object_get(current, "surface_pressure");
-    if (pressure)
+    if (pressure) {
         data->pressure = json_real_value(pressure);
+    }
 
     json_t* weather_code = json_object_get(current, "weather_code");
-    if (weather_code)
+    if (weather_code) {
         data->weather_code = json_integer_value(weather_code);
+    }
 
     json_t* is_day = json_object_get(current, "is_day");
-    if (is_day)
+    if (is_day) {
         data->is_day = json_integer_value(is_day);
+    }
 
     /* Parse units */
     if (current_units) {

@@ -17,14 +17,14 @@
  * http://openwall.info/wiki/people/solar/software/public-domain-source-code/md5
  * ======================================================================== */
 
-typedef uint32_t MD5_u32plus;
+typedef uint32_t MD5U32plus;
 
 typedef struct {
-    MD5_u32plus   lo, hi;
-    MD5_u32plus   a, b, c, d;
+    MD5U32plus    lo, hi;
+    MD5U32plus    a, b, c, d;
     unsigned char buffer[64];
-    MD5_u32plus   block[16];
-} MD5_CTX;
+    MD5U32plus    block[16];
+} MD5Ctx;
 
 /* MD5 basic functions */
 #define F(x, y, z) ((z) ^ ((x) & ((y) ^ (z))))
@@ -41,7 +41,7 @@ typedef struct {
 
 /* Platform-specific optimizations for reading data */
 #if defined(__i386__) || defined(__x86_64__) || defined(__vax__)
-#    define SET(n) (*(MD5_u32plus*)&ptr[(n) * 4])
+#    define SET(n) (*(MD5U32plus*)&ptr[(n) * 4])
 #    define GET(n) SET(n)
 #else
 #    define SET(n)                                                             \
@@ -53,10 +53,10 @@ typedef struct {
 #endif
 
 /* Process one or more 64-byte data blocks */
-static const void* body(MD5_CTX* ctx, const void* data, unsigned long size) {
+static const void* body(MD5Ctx* ctx, const void* data, unsigned long size) {
     const unsigned char* ptr;
-    MD5_u32plus          a, b, c, d;
-    MD5_u32plus          saved_a, saved_b, saved_c, saved_d;
+    MD5U32plus           a, b, c, d;
+    MD5U32plus           saved_a, saved_b, saved_c, saved_d;
 
     ptr = (const unsigned char*)data;
 
@@ -159,7 +159,7 @@ static const void* body(MD5_CTX* ctx, const void* data, unsigned long size) {
     return ptr;
 }
 
-static void MD5_Init(MD5_CTX* ctx) {
+static void m_d5_init(MD5Ctx* ctx) {
     ctx->a = 0x67452301;
     ctx->b = 0xefcdab89;
     ctx->c = 0x98badcfe;
@@ -169,13 +169,14 @@ static void MD5_Init(MD5_CTX* ctx) {
     ctx->hi = 0;
 }
 
-static void MD5_Update(MD5_CTX* ctx, const void* data, unsigned long size) {
-    MD5_u32plus   saved_lo;
+static void m_d5_update(MD5Ctx* ctx, const void* data, unsigned long size) {
+    MD5U32plus    saved_lo;
     unsigned long used, available;
 
     saved_lo = ctx->lo;
-    if ((ctx->lo = (saved_lo + size) & 0x1fffffff) < saved_lo)
+    if ((ctx->lo = (saved_lo + size) & 0x1fffffff) < saved_lo) {
         ctx->hi++;
+    }
     ctx->hi += size >> 29;
 
     used = saved_lo & 0x3f;
@@ -202,7 +203,7 @@ static void MD5_Update(MD5_CTX* ctx, const void* data, unsigned long size) {
     memcpy(ctx->buffer, data, size);
 }
 
-static void MD5_Final(unsigned char* result, MD5_CTX* ctx) {
+static void m_d5_final(unsigned char* result, MD5Ctx* ctx) {
     unsigned long used, available;
 
     used = ctx->lo & 0x3f;
@@ -261,10 +262,10 @@ int hash_md5_binary(const void* data, size_t data_size, unsigned char* output) {
         return -1;
     }
 
-    MD5_CTX ctx;
-    MD5_Init(&ctx);
-    MD5_Update(&ctx, data, (unsigned long)data_size);
-    MD5_Final(output, &ctx);
+    MD5Ctx ctx;
+    m_d5_init(&ctx);
+    m_d5_update(&ctx, data, (unsigned long)data_size);
+    m_d5_final(output, &ctx);
 
     return 0;
 }

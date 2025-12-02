@@ -108,10 +108,10 @@ int weather_server_instance_on_request(void* context) {
                                    strlen(html));
 
         size_t   total = header_len + strlen(html);
-        uint8_t* buf   = malloc(total);
+        uint8_t* buf   = malloc(total + 1);
 
         memcpy(buf, header, header_len);
-        memcpy(buf + header_len, html, strlen(html));
+        strcpy((char*)buf + header_len, html);
 
         conn->write_buffer = buf;
         conn->write_size   = total;

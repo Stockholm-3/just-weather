@@ -16,14 +16,16 @@
  */
 static int decode_chunked(const uint8_t* in, size_t in_len, char** out,
                           size_t* out_len) {
-    if (!in || !out || !out_len)
+    if (!in || !out || !out_len) {
         return -1;
+    }
 
     size_t pos   = 0;
     size_t alloc = 1024;
     char*  buf   = malloc(alloc);
-    if (!buf)
+    if (!buf) {
         return -2;
+    }
     size_t buf_len = 0;
 
     while (pos < in_len) {
@@ -82,8 +84,9 @@ static int decode_chunked(const uint8_t* in, size_t in_len, char** out,
 
         /* append chunk data */
         if (buf_len + chunk_size + 1 > alloc) {
-            while (buf_len + chunk_size + 1 > alloc)
+            while (buf_len + chunk_size + 1 > alloc) {
                 alloc *= 2;
+            }
             char* nbuf = realloc(buf, alloc);
             if (!nbuf) {
                 free(buf);
@@ -122,164 +125,172 @@ static int decode_chunked(const uint8_t* in, size_t in_len, char** out,
 
 //---------------Internal functions----------------
 
-void http_client_work(void* _Context, uint64_t _MonTime);
-void http_client_dispose(http_client** _ClientPtr);
+void http_client_work(void* context, uint64_t mon_time);
+void http_client_dispose(HttpClient** client_ptr);
 int  parse_url(const char* url, char* hostname, char* port_str, char* path);
 
 //----------------------------------------------------
 
-int http_client_init(const char* _URL, http_client** _ClientPtr,
+int http_client_init(const char* u_rl, HttpClient** client_ptr,
                      const char* port) {
-    if (_URL == NULL || _ClientPtr == NULL)
+    if (u_rl == NULL || client_ptr == NULL) {
         return -1;
+    }
 
-    if (strlen(_URL) > http_client_max_url_length)
+    if (strlen(u_rl) > http_client_max_url_length) {
         return -2;
+    }
 
-    http_client* _Client = (http_client*)calloc(1, sizeof(http_client));
-    if (_Client == NULL)
+    HttpClient* client = (HttpClient*)calloc(1, sizeof(HttpClient));
+    if (client == NULL) {
         return -3;
+    }
 
     /* ensure all fields start zeroed to avoid undefined state */
-    _Client->state = http_client_state_init;
+    client->state = HTTP_CLIENT_STATE_INIT;
 
-    _Client->task = smw_create_task(_Client, http_client_work);
+    client->task = smw_create_task(client, http_client_work);
 
-    _Client->callback = NULL;
-    _Client->timer    = 0;
+    client->callback = NULL;
+    client->timer    = 0;
 
     /* copy url (url buffer already zeroed by calloc) */
-    strcpy(_Client->url, _URL);
+    strcpy(client->url, u_rl);
 
     /* explicit initialization for clarity */
-    _Client->tcp_conn    = NULL;
-    _Client->hostname[0] = '\0';
-    _Client->path[0]     = '\0';
-    _Client->port[0]     = '\0';
+    client->tcp_conn    = NULL;
+    client->hostname[0] = '\0';
+    client->path[0]     = '\0';
+    client->port[0]     = '\0';
 
-    _Client->write_buffer     = NULL;
-    _Client->write_size       = 0;
-    _Client->write_offset     = 0;
-    _Client->read_buffer      = NULL;
-    _Client->read_buffer_size = 0;
-    _Client->body_start       = 0;
-    _Client->content_len      = 0;
-    _Client->status_code      = 0;
-    _Client->body             = NULL;
+    client->write_buffer     = NULL;
+    client->write_size       = 0;
+    client->write_offset     = 0;
+    client->read_buffer      = NULL;
+    client->read_buffer_size = 0;
+    client->body_start       = 0;
+    client->content_len      = 0;
+    client->status_code      = 0;
+    client->body             = NULL;
 
-    *(_ClientPtr) = _Client;
+    *(client_ptr) = client;
 
     return 0;
 }
 
-int http_client_get(const char* _URL, uint64_t _Timeout,
-                    void (*_Callback)(const char* _Event,
-                                      const char* _Response),
+int http_client_get(const char* u_rl, uint64_t timeout,
+                    void (*callback)(const char* event, const char* response),
                     const char* port) {
-    http_client* client = NULL;
-    if (http_client_init(_URL, &client, port) != 0)
+    HttpClient* client = NULL;
+    if (http_client_init(u_rl, &client, port) != 0) {
         return -1;
+    }
 
-    client->timeout  = _Timeout;
-    client->callback = _Callback;
+    client->timeout  = timeout;
+    client->callback = callback;
 
     return 0;
 }
 
-http_client_state http_client_work_init(http_client* _Client) {
+HttpClientState http_client_work_init(HttpClient* client) {
     // 1. Parse the URL to extract hostname, port, and path
-    if (parse_url(_Client->url, _Client->hostname, _Client->port,
-                  _Client->path) != 0) {
-        if (_Client->callback != NULL)
-            _Client->callback("ERROR", "Invalid URL");
-        return http_client_state_dispose;
+    if (parse_url(client->url, client->hostname, client->port, client->path) !=
+        0) {
+        if (client->callback != NULL) {
+            client->callback("ERROR", "Invalid URL");
+        }
+        return HTTP_CLIENT_STATE_DISPOSE;
     }
 
     // 2. Validate the parsed data
-    if (strlen(_Client->hostname) == 0) {
-        if (_Client->callback != NULL)
-            _Client->callback("ERROR", "No hostname in URL");
-        return http_client_state_dispose;
+    if (strlen(client->hostname) == 0) {
+        if (client->callback != NULL) {
+            client->callback("ERROR", "No hostname in URL");
+        }
+        return HTTP_CLIENT_STATE_DISPOSE;
     }
 
     // 3. Initialize response buffer
-    _Client->response[0] = '\0';
+    client->response[0] = '\0';
 
     // 4. Log what we're about to do
-    printf("[HTTP_CLIENT] Connecting to %s:%s%s\n", _Client->hostname,
-           _Client->port, _Client->path);
+    printf("[HTTP_CLIENT] Connecting to %s:%s%s\n", client->hostname,
+           client->port, client->path);
     // Move to connect state
-    return http_client_state_connect;
+    return HTTP_CLIENT_STATE_CONNECT;
 }
 
-http_client_state http_client_work_connect(http_client* _Client) {
+HttpClientState http_client_work_connect(HttpClient* client) {
     // Allocate TCPClient on heap
     TCPClient* tcp_client = malloc(sizeof(TCPClient));
     if (tcp_client == NULL) {
-        if (_Client->callback != NULL)
-            _Client->callback("ERROR", "Memory allocation failed");
-        return http_client_state_dispose;
+        if (client->callback != NULL) {
+            client->callback("ERROR", "Memory allocation failed");
+        }
+        return HTTP_CLIENT_STATE_DISPOSE;
     }
 
     // Initialize the TCPClient
     tcp_client->fd = -1;
 
     // Connect using TCP module
-    int result =
-        tcp_client_connect(tcp_client, _Client->hostname, _Client->port);
+    int result = tcp_client_connect(tcp_client, client->hostname, client->port);
 
     if (result != 0) {
-        if (_Client->callback != NULL)
-            _Client->callback("ERROR", "Failed to initiate connection");
+        if (client->callback != NULL) {
+            client->callback("ERROR", "Failed to initiate connection");
+        }
         free(tcp_client);
-        return http_client_state_dispose;
+        return HTTP_CLIENT_STATE_DISPOSE;
     }
 
-    _Client->tcp_conn = tcp_client;
+    client->tcp_conn = tcp_client;
 
-    return http_client_state_connecting;
+    return HTTP_CLIENT_STATE_CONNECTING;
 }
 
-http_client_state http_client_work_connecting(http_client* _Client) {
-    if (_Client->tcp_conn == NULL || _Client->tcp_conn->fd < 0) {
-        return http_client_state_dispose;
+HttpClientState http_client_work_connecting(HttpClient* client) {
+    if (client->tcp_conn == NULL || client->tcp_conn->fd < 0) {
+        return HTTP_CLIENT_STATE_DISPOSE;
     }
 
-    int fd = _Client->tcp_conn->fd;
+    int fd = client->tcp_conn->fd;
 
     // Check if connection has completed
     int       error = 0;
     socklen_t len   = sizeof(error);
     if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
-        return http_client_state_dispose;
+        return HTTP_CLIENT_STATE_DISPOSE;
     }
 
     if (error == 0) {
         // Connection successful!
-        return http_client_state_writing;
+        return HTTP_CLIENT_STATE_WRITING;
     } else if (error == EINPROGRESS || error == EALREADY) {
         // Still connecting, try again next tick
-        return http_client_state_connecting;
+        return HTTP_CLIENT_STATE_CONNECTING;
     } else {
         // Connection failed
-        if (_Client->callback != NULL)
-            _Client->callback("ERROR", "Connection failed");
-        return http_client_state_dispose;
+        if (client->callback != NULL) {
+            client->callback("ERROR", "Connection failed");
+        }
+        return HTTP_CLIENT_STATE_DISPOSE;
     }
 }
 
-http_client_state http_client_work_writing(http_client* _Client) {
-    if (_Client->write_buffer == NULL) {
-        _Client->write_buffer = malloc(2048);
-        if (_Client->write_buffer == NULL) {
-            if (_Client->callback != NULL)
-                _Client->callback("ERROR", "Memory allocation failed");
-            return http_client_state_dispose;
+HttpClientState http_client_work_writing(HttpClient* client) {
+    if (client->write_buffer == NULL) {
+        client->write_buffer = malloc(2048);
+        if (client->write_buffer == NULL) {
+            if (client->callback != NULL) {
+                client->callback("ERROR", "Memory allocation failed");
+            }
+            return HTTP_CLIENT_STATE_DISPOSE;
         }
 
         // browser-like User-Agent та headers
         int len = snprintf(
-            (char*)_Client->write_buffer, 2048,
+            (char*)client->write_buffer, 2048,
             "GET %s HTTP/1.1\r\n"
             "Host: %s\r\n"
             "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -289,44 +300,45 @@ http_client_state http_client_work_writing(http_client* _Client) {
             "Accept-Encoding: identity\r\n"
             "Connection: close\r\n"
             "\r\n",
-            _Client->path, _Client->hostname);
+            client->path, client->hostname);
 
-        _Client->write_size   = len;
-        _Client->write_offset = 0;
+        client->write_size   = len;
+        client->write_offset = 0;
     }
 
     // Send data
-    ssize_t sent = send(
-        _Client->tcp_conn->fd, _Client->write_buffer + _Client->write_offset,
-        _Client->write_size - _Client->write_offset, MSG_NOSIGNAL);
+    ssize_t sent =
+        send(client->tcp_conn->fd, client->write_buffer + client->write_offset,
+             client->write_size - client->write_offset, MSG_NOSIGNAL);
 
     /* write attempt logged at debug level previously; suppressed in normal runs
      */
 
     if (sent < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            return http_client_state_writing; // Try again later
+            return HTTP_CLIENT_STATE_WRITING; // Try again later
         } else {
-            if (_Client->callback != NULL)
-                _Client->callback("ERROR", "Send failed");
-            return http_client_state_dispose;
+            if (client->callback != NULL) {
+                client->callback("ERROR", "Send failed");
+            }
+            return HTTP_CLIENT_STATE_DISPOSE;
         }
     }
 
-    _Client->write_offset += sent;
+    client->write_offset += sent;
 
-    if (_Client->write_offset >= _Client->write_size) {
-        free(_Client->write_buffer);
-        _Client->write_buffer = NULL;
-        return http_client_state_reading;
+    if (client->write_offset >= client->write_size) {
+        free(client->write_buffer);
+        client->write_buffer = NULL;
+        return HTTP_CLIENT_STATE_READING;
     }
 
-    return http_client_state_writing;
+    return HTTP_CLIENT_STATE_WRITING;
 }
 
-http_client_state http_client_work_reading(http_client* client) {
+HttpClientState http_client_work_reading(HttpClient* client) {
     if (!client) {
-        return http_client_state_dispose;
+        return HTTP_CLIENT_STATE_DISPOSE;
     }
 
     uint8_t chunk_buffer[CHUNK_SIZE];
@@ -338,10 +350,10 @@ http_client_state http_client_work_reading(http_client* client) {
         if (client->callback) {
             client->callback("ERROR", "Read failed");
         }
-        return http_client_state_dispose;
+        return HTTP_CLIENT_STATE_DISPOSE;
     } else if (bytes_read == 0) {
         /* No data available right now (non-blocking). Try again later. */
-        return http_client_state_reading;
+        return HTTP_CLIENT_STATE_READING;
     } else if (bytes_read == -2) {
         /* EOF from peer: treat as end-of-stream */
         if (client->body_start > 0) {
@@ -358,14 +370,15 @@ http_client_state http_client_work_reading(http_client* client) {
                     decode_chunked(client->read_buffer + client->body_start,
                                    remaining, &decoded, &dec_len);
                 if (rc != 0) {
-                    if (client->callback)
+                    if (client->callback) {
                         client->callback("ERROR", "Chunked decode failed");
-                    return http_client_state_dispose;
+                    }
+                    return HTTP_CLIENT_STATE_DISPOSE;
                 }
 
                 client->body        = (uint8_t*)decoded;
                 client->content_len = dec_len;
-                return http_client_state_done;
+                return HTTP_CLIENT_STATE_DONE;
             } else {
                 client->content_len = remaining;
                 if (client->content_len > 0) {
@@ -377,12 +390,12 @@ http_client_state http_client_work_reading(http_client* client) {
                         client->body[client->content_len] = '\0';
                     }
                 }
-                return http_client_state_done;
+                return HTTP_CLIENT_STATE_DONE;
             }
         }
 
         /* No headers parsed yet but connection closed - nothing to do */
-        return http_client_state_dispose;
+        return HTTP_CLIENT_STATE_DISPOSE;
     }
 
     /* read progress suppressed in normal logs */
@@ -394,7 +407,7 @@ http_client_state http_client_work_reading(http_client* client) {
         if (client->callback) {
             client->callback("ERROR", "Memory allocation failed");
         }
-        return http_client_state_dispose;
+        return HTTP_CLIENT_STATE_DISPOSE;
     }
 
     client->read_buffer = new_buffer;
@@ -416,7 +429,7 @@ http_client_state http_client_work_reading(http_client* client) {
                     if (client->callback) {
                         client->callback("ERROR", "Memory allocation failed");
                     }
-                    return http_client_state_dispose;
+                    return HTTP_CLIENT_STATE_DISPOSE;
                 }
 
                 memcpy(headers, client->read_buffer, header_end);
@@ -469,24 +482,24 @@ http_client_state http_client_work_reading(http_client* client) {
                            client->content_len);
                     client->body[client->content_len] = '\0';
                 }
-                return http_client_state_done;
+                return HTTP_CLIENT_STATE_DONE;
             }
         } else if (client->chunked) {
             // Check for terminating chunk sequence "0\r\n\r\n" in buffer
-            const char   term[]   = "0\r\n\r\n";
-            const size_t term_len = 5; /* actually "0\r\n\r\n" is 5 bytes:
+            const char   TERM[]   = "0\r\n\r\n";
+            const size_t TERM_LEN = 5; /* actually "0\r\n\r\n" is 5 bytes:
                                           '0','\r','\n','\r','\n' */
             size_t found = SIZE_MAX;
             for (size_t j = client->body_start;
-                 j + term_len <= client->read_buffer_size; j++) {
-                if (memcmp(client->read_buffer + j, term, term_len) == 0) {
+                 j + TERM_LEN <= client->read_buffer_size; j++) {
+                if (memcmp(client->read_buffer + j, TERM, TERM_LEN) == 0) {
                     found = j;
                     break;
                 }
             }
 
             if (found != SIZE_MAX) {
-                size_t total_len = (found + term_len) - client->body_start;
+                size_t total_len = (found + TERM_LEN) - client->body_start;
                 /* decode chunked data present in buffer */
                 char*  decoded = NULL;
                 size_t dec_len = 0;
@@ -494,16 +507,17 @@ http_client_state http_client_work_reading(http_client* client) {
                     decode_chunked(client->read_buffer + client->body_start,
                                    total_len, &decoded, &dec_len);
                 if (rc != 0) {
-                    if (client->callback)
+                    if (client->callback) {
                         client->callback("ERROR", "Chunked decode failed");
-                    return http_client_state_dispose;
+                    }
+                    return HTTP_CLIENT_STATE_DISPOSE;
                 }
                 client->body        = (uint8_t*)decoded;
                 client->content_len = dec_len;
-                return http_client_state_done;
+                return HTTP_CLIENT_STATE_DONE;
             }
 
-            return http_client_state_reading;
+            return HTTP_CLIENT_STATE_READING;
         } else {
             // No content-length and not chunked -> assume server will close
             // connection before end of body. Use MSG_PEEK to detect EOF on
@@ -527,15 +541,16 @@ http_client_state http_client_work_reading(http_client* client) {
                             client->body[client->content_len] = '\0';
                         }
                     }
-                    return http_client_state_done;
+                    return HTTP_CLIENT_STATE_DONE;
                 } else if (p < 0) {
                     if (errno == EAGAIN || errno == EWOULDBLOCK) {
                         // no data available yet, keep reading
-                        return http_client_state_reading;
+                        return HTTP_CLIENT_STATE_READING;
                     } else {
-                        if (client->callback)
+                        if (client->callback) {
                             client->callback("ERROR", "Peek failed");
-                        return http_client_state_dispose;
+                        }
+                        return HTTP_CLIENT_STATE_DISPOSE;
                     }
                 }
                 // p > 0 -> there is data pending, keep reading
@@ -543,111 +558,115 @@ http_client_state http_client_work_reading(http_client* client) {
         }
     }
 
-    return http_client_state_reading;
+    return HTTP_CLIENT_STATE_READING;
 }
 
-http_client_state http_client_work_done(http_client* _Client) {
-    if (_Client->callback != NULL) {
-        if (_Client->status_code >= 200 && _Client->status_code < 300) {
+HttpClientState http_client_work_done(HttpClient* client) {
+    if (client->callback != NULL) {
+        if (client->status_code >= 200 && client->status_code < 300) {
             // Success response
-            _Client->callback("RESPONSE",
-                              _Client->body ? (char*)_Client->body : "");
+            client->callback("RESPONSE",
+                             client->body ? (char*)client->body : "");
         } else {
             // Error response
             char error_info[256];
             snprintf(error_info, sizeof(error_info), "HTTP %d: %s",
-                     _Client->status_code,
-                     _Client->body ? (char*)_Client->body : "");
-            _Client->callback("ERROR", error_info);
+                     client->status_code,
+                     client->body ? (char*)client->body : "");
+            client->callback("ERROR", error_info);
         }
     }
 
     // Clean up resources
-    if (_Client->read_buffer) {
-        free(_Client->read_buffer);
-        _Client->read_buffer = NULL;
+    if (client->read_buffer) {
+        free(client->read_buffer);
+        client->read_buffer = NULL;
     }
 
-    if (_Client->body) {
-        free(_Client->body);
-        _Client->body = NULL;
+    if (client->body) {
+        free(client->body);
+        client->body = NULL;
     }
 
-    if (_Client->write_buffer) {
-        free(_Client->write_buffer);
-        _Client->write_buffer = NULL;
+    if (client->write_buffer) {
+        free(client->write_buffer);
+        client->write_buffer = NULL;
     }
 
     // Close TCP connection
-    if (_Client->tcp_conn) {
-        tcp_client_disconnect(_Client->tcp_conn);
-        _Client->tcp_conn = NULL;
+    if (client->tcp_conn) {
+        tcp_client_disconnect(client->tcp_conn);
+        client->tcp_conn = NULL;
     }
 
-    return http_client_state_dispose;
+    return HTTP_CLIENT_STATE_DISPOSE;
 }
 
-void http_client_work(void* _Context, uint64_t _MonTime) {
-    http_client* _Client = (http_client*)_Context;
+void http_client_work(void* context, uint64_t mon_time) {
+    HttpClient* client = (HttpClient*)context;
 
-    if (_Client->timer == 0) {
-        _Client->timer = _MonTime;
-    } else if (_MonTime >= _Client->timer + _Client->timeout) {
-        if (_Client->callback != NULL)
-            _Client->callback("TIMEOUT", NULL);
+    if (client->timer == 0) {
+        client->timer = mon_time;
+    } else if (mon_time >= client->timer + client->timeout) {
+        if (client->callback != NULL) {
+            client->callback("TIMEOUT", NULL);
+        }
 
-        http_client_dispose(&_Client);
+        http_client_dispose(&client);
         return;
     }
 
-    switch (_Client->state) {
-    case http_client_state_init:
-        _Client->state = http_client_work_init(_Client);
+    switch (client->state) {
+    case HTTP_CLIENT_STATE_INIT:
+        client->state = http_client_work_init(client);
         break;
 
-    case http_client_state_connect:
-        _Client->state = http_client_work_connect(_Client);
+    case HTTP_CLIENT_STATE_CONNECT:
+        client->state = http_client_work_connect(client);
         break;
 
-    case http_client_state_connecting:
-        _Client->state = http_client_work_connecting(_Client);
+    case HTTP_CLIENT_STATE_CONNECTING:
+        client->state = http_client_work_connecting(client);
         break;
 
-    case http_client_state_writing:
-        _Client->state = http_client_work_writing(_Client);
+    case HTTP_CLIENT_STATE_WRITING:
+        client->state = http_client_work_writing(client);
         break;
 
-    case http_client_state_reading:
-        _Client->state = http_client_work_reading(_Client);
+    case HTTP_CLIENT_STATE_READING:
+        client->state = http_client_work_reading(client);
         break;
 
-    case http_client_state_done:
-        _Client->state = http_client_work_done(_Client);
+    case HTTP_CLIENT_STATE_DONE:
+        client->state = http_client_work_done(client);
         break;
 
-    case http_client_state_dispose:
-        http_client_dispose(&_Client);
+    case HTTP_CLIENT_STATE_DISPOSE:
+        http_client_dispose(&client);
         break;
     }
 }
 
-void http_client_dispose(http_client** _ClientPtr) {
-    if (_ClientPtr == NULL || *(_ClientPtr) == NULL)
+void http_client_dispose(HttpClient** client_ptr) {
+    if (client_ptr == NULL || *(client_ptr) == NULL) {
         return;
+    }
 
-    http_client* _Client = *(_ClientPtr);
+    HttpClient* client = *(client_ptr);
 
-    if (_Client->task != NULL)
-        smw_destroy_task(_Client->task);
+    if (client->task != NULL) {
+        smw_destroy_task(client->task);
+    }
 
-    free(_Client);
+    free(client);
 
-    *(_ClientPtr) = NULL;
+    *(client_ptr) = NULL;
 }
 
 int parse_url(const char* url, char* hostname, char* port, char* path) {
-    if (url == NULL || hostname == NULL || port == NULL || path == NULL)
+    if (url == NULL || hostname == NULL || port == NULL || path == NULL) {
         return -1;
+    }
 
     // Default values
     strcpy(port, "80");
@@ -665,13 +684,15 @@ int parse_url(const char* url, char* hostname, char* port, char* path) {
 
     // Find the end of hostname
     const char* end = start;
-    while (*end && *end != ':' && *end != '/')
+    while (*end && *end != ':' && *end != '/') {
         end++;
+    }
 
     // Extract hostname
     int hostname_len = end - start;
-    if (hostname_len == 0 || hostname_len > 255)
+    if (hostname_len == 0 || hostname_len > 255) {
         return -1;
+    }
 
     strncpy(hostname, start, hostname_len);
     hostname[hostname_len] = '\0';
@@ -681,8 +702,9 @@ int parse_url(const char* url, char* hostname, char* port, char* path) {
         end++;
 
         const char* port_start = end;
-        while (*end && *end != '/')
+        while (*end && *end != '/') {
             end++;
+        }
 
         int port_len = end - port_start;
         if (port_len > 0 && port_len < 16) {

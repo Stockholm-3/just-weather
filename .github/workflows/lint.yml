@@ -25,7 +25,6 @@ jobs:
       - name: Generate compile_commands.json
         run: |
           bear -- make clean all
-          make all
 
       - name: Run lint check (naming standards)
         run: make lint-ci

@@ -3,8 +3,8 @@
 #ifndef HTTP_SERVER_CONNECTION_H
 #define HTTP_SERVER_CONNECTION_H
 
-#include "../tcp_client.h"
 #include "smw.h"
+#include "tcp_client.h"
 
 #include <stddef.h>
 #include <stdint.h>

@@ -18,10 +18,11 @@
 static bool g_initialized = false;
 
 /* Internal functions */
-static int parse_city_query(const char* query, char* city, size_t city_size,
-                            char* country, size_t country_size, char* region,
-                            size_t region_size);
-static int ensure_initialized(void);
+static void url_decode(const char* src, char* dst, size_t dst_size);
+static int  parse_city_query(const char* query, char* city, size_t city_size,
+                             char* country, size_t country_size, char* region,
+                             size_t region_size);
+static int  ensure_initialized(void);
 
 /* ============= Lazy Initialization ============= */
 
@@ -358,6 +359,34 @@ void weather_location_handler_cleanup(void) {
 
 /* ============= Internal Functions ============= */
 
+/* URL decode helper: converts %XX to characters, + and _ to space */
+static void url_decode(const char* src, char* dst, size_t dst_size) {
+    if (!src || !dst || dst_size == 0) {
+        return;
+    }
+
+    size_t dst_pos = 0;
+    for (size_t i = 0; src[i] && dst_pos + 1 < dst_size; i++) {
+        if (src[i] == '%' && src[i + 1] && src[i + 2]) {
+            /* Parse hex value */
+            char hex[3] = {src[i + 1], src[i + 2], '\0'};
+            int  value  = (int)strtol(hex, NULL, 16);
+            if (value > 0 && value < 256) {
+                dst[dst_pos++] = (char)value;
+                i += 2;
+            } else {
+                dst[dst_pos++] = src[i];
+            }
+        } else if (src[i] == '+' || src[i] == '_') {
+            /* Both + and _ represent spaces in query parameters */
+            dst[dst_pos++] = ' ';
+        } else {
+            dst[dst_pos++] = src[i];
+        }
+    }
+    dst[dst_pos] = '\0';
+}
+
 static int parse_city_query(const char* query, char* city, size_t city_size,
                             char* country, size_t country_size, char* region,
                             size_t region_size) {
@@ -376,24 +405,17 @@ static int parse_city_query(const char* query, char* city, size_t city_size,
 
     while (token != NULL) {
         if (strncmp(token, "city=", 5) == 0) {
-            strncpy(city, token + 5, city_size - 1);
-            city[city_size - 1] = '\0';
-            found_city          = 1;
+            /* Decode URL-encoded city name */
+            url_decode(token + 5, city, city_size);
+            found_city = 1;
         } else if (strncmp(token, "country=", 8) == 0) {
-            strncpy(country, token + 8, country_size - 1);
-            country[country_size - 1] = '\0';
+            /* Decode URL-encoded country code */
+            url_decode(token + 8, country, country_size);
         } else if (strncmp(token, "region=", 7) == 0) {
-            strncpy(region, token + 7, region_size - 1);
-            region[region_size - 1] = '\0';
+            /* Decode URL-encoded region */
+            url_decode(token + 7, region, region_size);
         }
         token = strtok(NULL, "&");
-    }
-
-    /* Normalize region: replace underscores and '+' with spaces (common URL
-     * forms) */
-    for (size_t i = 0; i < region_size && region[i]; ++i) {
-        if (region[i] == '_' || region[i] == '+')
-            region[i] = ' ';
     }
 
     return found_city ? 0 : -1;

@@ -1,7 +1,7 @@
 #ifndef WEATHER_SERVER_H
 #define WEATHER_SERVER_H
 
-#include "http_server/http_server.h"
+#include "http_server.h"
 #include "linked_list.h"
 #include "smw.h"
 

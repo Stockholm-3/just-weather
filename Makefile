@@ -25,7 +25,9 @@ endif
 # Compiler and linker flags
 # ------------------------------------------------------------
 CFLAGS      := $(CFLAGS_BASE) -Wall -Werror -Wfatal-errors -MMD -MP \
-               -Ilib/jansson -Isrc/lib -Isrc/server -Iincludes
+               -Ilib/jansson -Isrc/lib -Isrc/server -Iincludes \
+               -Isrc/lib/tcp -Isrc/lib/http -Isrc/lib/http/http_server -Isrc/lib/utils -Isrc/lib/weather \
+               -Isrc/server/api -Isrc/server/api/geocoding -Isrc/server/api/openmeteo
 
 JANSSON_CFLAGS := $(filter-out -Werror -Wfatal-errors,$(CFLAGS)) -w
 

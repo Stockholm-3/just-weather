@@ -2,9 +2,9 @@
 #ifndef HTTP_SERVER_H
 #define HTTP_SERVER_H
 
-#include "../tcp_server.h"
 #include "http_server_connection.h"
 #include "smw.h"
+#include "tcp_server.h"
 
 typedef int (*HttpServerOnConnection)(void*                 context,
                                       HTTPServerConnection* connection);

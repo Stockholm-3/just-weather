@@ -1,7 +1,7 @@
 #ifndef WEATHER_SERVER_INSTANCE_H
 #define WEATHER_SERVER_INSTANCE_H
 
-#include "http_server/http_server_connection.h"
+#include "http_server_connection.h"
 
 typedef struct {
     HTTPServerConnection* connection;

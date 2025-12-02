@@ -8,9 +8,9 @@
 #include "geocoding_api.h"
 
 #include "hash_md5.h"
+#include "http_client.h"
 
 #include <ctype.h>
-#include <curl/curl.h>
 #include <errno.h>
 #include <jansson.h>
 #include <stdio.h>
@@ -21,7 +21,7 @@
 
 /* ============= Configuration ============= */
 
-#define GEOCODING_API_URL "https://geocoding-api.open-meteo.com/v1/search"
+#define GEOCODING_API_URL "http://geocoding-api.open-meteo.com/v1/search"
 #define DEFAULT_CACHE_DIR "./cache/geo_cache"
 #define DEFAULT_CACHE_TTL 604800 /* 7 days */
 #define DEFAULT_MAX_RESULTS 10
@@ -38,16 +38,20 @@ static GeocodingConfig g_config = {.cache_dir   = DEFAULT_CACHE_DIR,
 /* ============= Internal Structures ============= */
 
 typedef struct {
-    char*  data;
-    size_t size;
-} MemoryChunk;
+    char*        response_data;
+    size_t       response_size;
+    int          http_status;
+    volatile int completed;
+    volatile int error;
+} HttpFetchContext;
 
 /* ============= Internal Functions ============= */
 
-static size_t write_callback(void* contents, size_t size, size_t nmemb,
-                             void* userp);
-static char*  generate_cache_filepath(const char* search_key);
-static int    is_cache_valid(const char* filepath, int ttl_seconds);
+static void  http_fetch_callback(const char* event, const char* response);
+static int   fetch_url_sync(const char* url, char** response_data,
+                            int* http_status);
+static char* generate_cache_filepath(const char* search_key);
+static int   is_cache_valid(const char* filepath, int ttl_seconds);
 static int load_from_cache(const char* filepath, GeocodingResponse** response);
 static int save_to_cache(const char* filepath, const char* json_str);
 static int fetch_from_api(const char* city_name, const char* country,
@@ -56,7 +60,6 @@ static char* build_api_url(const char* city_name, const char* country,
                            int max_results, const char* language);
 static int   parse_geocoding_json(const char*         json_str,
                                   GeocodingResponse** response);
-static char* url_encode(const char* str);
 static void  normalize_city_name_for_cache(const char* in, char* out,
                                            size_t out_size);
 
@@ -114,10 +117,7 @@ int geocoding_api_init(GeocodingConfig* config) {
                 "[GEOCODING] Warning: Failed to create cache directory\n");
     }
 
-    /* Initialize curl globally (if not already initialized) */
-    curl_global_init(CURL_GLOBAL_DEFAULT);
-
-    printf("[GEOCODING] API initialized\n");
+    printf("[GEOCODING] API initialized (http_client mode)\n");
     printf("[GEOCODING] Cache dir: %s\n", g_config.cache_dir);
     printf("[GEOCODING] Cache TTL: %d seconds (%d days)\n", g_config.cache_ttl,
            g_config.cache_ttl / 86400);
@@ -432,10 +432,7 @@ int geocoding_api_clear_cache(void) {
     }
 }
 
-void geocoding_api_cleanup(void) {
-    /* curl_global_cleanup is called in open_meteo_api_cleanup */
-    printf("[GEOCODING] API cleaned up\n");
-}
+void geocoding_api_cleanup(void) { printf("[GEOCODING] API cleaned up\n"); }
 
 int geocoding_api_format_result(GeocodingResult* result, char* buffer,
                                 size_t buffer_size) {
@@ -465,26 +462,60 @@ int geocoding_api_format_result(GeocodingResult* result, char* buffer,
 
 /* ============= Internal Functions Implementation ============= */
 
-/**
- * CURL write callback for receiving data
- */
-static size_t write_callback(void* contents, size_t size, size_t nmemb,
-                             void* userp) {
-    size_t       realsize = size * nmemb;
-    MemoryChunk* mem      = (MemoryChunk*)userp;
+/* ============= HTTP Client Integration ============= */
 
-    char* ptr = realloc(mem->data, mem->size + realsize + 1);
-    if (!ptr) {
-        fprintf(stderr, "[GEOCODING] Out of memory\n");
-        return 0;
+static HttpFetchContext* g_fetch_context = NULL;
+
+static void http_fetch_callback(const char* event, const char* response) {
+    if (!g_fetch_context) {
+        return;
     }
 
-    mem->data = ptr;
-    memcpy(&(mem->data[mem->size]), contents, realsize);
-    mem->size += realsize;
-    mem->data[mem->size] = 0;
+    if (strcmp(event, "RESPONSE") == 0) {
+        g_fetch_context->response_data = strdup(response);
+        g_fetch_context->response_size = strlen(response);
+        g_fetch_context->http_status   = 200;
+        g_fetch_context->completed     = 1;
+    } else if (strcmp(event, "ERROR") == 0 || strcmp(event, "TIMEOUT") == 0) {
+        g_fetch_context->error     = 1;
+        g_fetch_context->completed = 1;
+    }
+}
 
-    return realsize;
+static int fetch_url_sync(const char* url, char** response_data,
+                          int* http_status) {
+    HttpFetchContext context = {0};
+    g_fetch_context          = &context;
+
+    http_client_get(url, 30000, http_fetch_callback, NULL);
+
+    /* Poll event loop - fast iterations, no sleep! */
+    time_t start_time      = time(NULL);
+    time_t timeout_seconds = 30;
+
+    while (!context.completed) {
+        smw_work(0); /* Pass 0 if monotonic time unavailable */
+
+        /* Check timeout (1 second granularity) */
+        if (time(NULL) - start_time > timeout_seconds) {
+            fprintf(stderr, "[GEOCODING] Timeout waiting for response\n");
+            break;
+        }
+    }
+
+    g_fetch_context = NULL;
+
+    if (context.error || !context.completed) {
+        if (context.response_data) {
+            free(context.response_data);
+        }
+        return -1;
+    }
+
+    *response_data = context.response_data;
+    *http_status   = context.http_status;
+
+    return 0;
 }
 
 /**
@@ -624,31 +655,26 @@ static int save_to_cache(const char* filepath, const char* json_str) {
     return 0;
 }
 
-/**
- * URL encoding for parameters
- */
-static char* url_encode(const char* str) {
-    if (!str) {
-        return NULL;
+/* Helper function: simple URL encoding */
+static int url_encode_char(const char* src, int src_len, char* dst,
+                           int dst_size) {
+    int dst_pos = 0;
+    for (int i = 0; i < src_len && dst_pos + 3 < dst_size; i++) {
+        unsigned char c = (unsigned char)src[i];
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+            (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' ||
+            c == '~') {
+            dst[dst_pos++] = c;
+        } else if (c == ' ') {
+            dst[dst_pos++] = '+';
+        } else {
+            if (dst_pos + 2 >= dst_size)
+                break;
+            dst_pos += snprintf(dst + dst_pos, dst_size - dst_pos, "%%%02X", c);
+        }
     }
-
-    CURL* curl = curl_easy_init();
-    if (!curl) {
-        return NULL;
-    }
-
-    char* encoded = curl_easy_escape(curl, str, strlen(str));
-    if (!encoded) {
-        curl_easy_cleanup(curl);
-        return NULL;
-    }
-
-    /* Copy the result */
-    char* result = strdup(encoded);
-    curl_free(encoded);
-    curl_easy_cleanup(curl);
-
-    return result;
+    dst[dst_pos] = '\0';
+    return dst_pos;
 }
 
 /**
@@ -661,21 +687,22 @@ static char* build_api_url(const char* city_name, const char* country,
         return NULL;
     }
 
-    char* encoded_city = url_encode(city_name);
-    if (!encoded_city) {
-        free(url);
-        return NULL;
-    }
+    /* Encode city name */
+    char encoded_city[512];
+    url_encode_char(city_name, strlen(city_name), encoded_city,
+                    sizeof(encoded_city));
 
     int written =
         snprintf(url, 2048, "%s?name=%s&count=%d&language=%s&format=json",
                  GEOCODING_API_URL, encoded_city, max_results, language);
 
-    free(encoded_city);
-
     if (country) {
-        written +=
-            snprintf(url + written, 2048 - written, "&country=%s", country);
+        /* Encode country if present */
+        char encoded_country[256];
+        url_encode_char(country, strlen(country), encoded_country,
+                        sizeof(encoded_country));
+        written += snprintf(url + written, 2048 - written, "&country=%s",
+                            encoded_country);
     }
 
     return url;
@@ -792,10 +819,6 @@ static int parse_geocoding_json(const char*         json_str,
  */
 static int fetch_from_api(const char* city_name, const char* country,
                           GeocodingResponse** response) {
-    CURL*       curl;
-    CURLcode    res;
-    MemoryChunk chunk = {0};
-
     /* Build URL */
     char* url = build_api_url(city_name, country, g_config.max_results,
                               g_config.language);
@@ -805,56 +828,23 @@ static int fetch_from_api(const char* city_name, const char* country,
 
     printf("[GEOCODING] Fetching: %s\n", url);
 
-    /* Initialize curl */
-    curl = curl_easy_init();
-    if (!curl) {
-        free(url);
+    char* response_data = NULL;
+    int   http_status   = 0;
+
+    int result = fetch_url_sync(url, &response_data, &http_status);
+    free(url);
+
+    if (result != 0 || !response_data) {
         return -2;
     }
 
-    /* Configure curl */
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)&chunk);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "just-weather-geocoding/1.0");
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
-
-    /* Perform request */
-    res = curl_easy_perform(curl);
-
-    if (res != CURLE_OK) {
-        fprintf(stderr, "[GEOCODING] CURL error: %s\n",
-                curl_easy_strerror(res));
-        curl_easy_cleanup(curl);
-        free(url);
-        if (chunk.data)
-            free(chunk.data);
-        return -3;
-    }
-
-    /* Check HTTP status */
-    long http_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    if (http_code != 200) {
-        fprintf(stderr, "[GEOCODING] HTTP error: %ld\n", http_code);
-        curl_easy_cleanup(curl);
-        free(url);
-        if (chunk.data)
-            free(chunk.data);
-        return -4;
-    }
-
-    curl_easy_cleanup(curl);
-    free(url);
-
     /* Parse JSON */
-    int result = parse_geocoding_json(chunk.data, response);
+    int parse_result = parse_geocoding_json(response_data, response);
 
-    if (chunk.data)
-        free(chunk.data);
+    free(response_data);
 
-    if (result != 0) {
-        return -5;
+    if (parse_result != 0) {
+        return -3;
     }
 
     printf("[GEOCODING] Found %d result(s)\n", (*response)->count);

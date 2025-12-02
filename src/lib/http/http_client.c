@@ -178,11 +178,11 @@ int http_client_init(const char* u_rl, HttpClient** client_ptr,
     return 0;
 }
 
-int http_client_get(const char* u_rl, uint64_t timeout,
+int http_client_get(const char* url, uint64_t timeout,
                     void (*callback)(const char* event, const char* response),
                     const char* port) {
     HttpClient* client = NULL;
-    if (http_client_init(u_rl, &client, port) != 0) {
+    if (http_client_init(url, &client, port) != 0) {
         return -1;
     }
 

@@ -20,7 +20,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libcurl4-openssl-dev
-          git clone --branch lib --single-branch https://github.com/Stockholm-1/etherskies.git ../lib
+          #install jansson from source
+          git clone --branch lib --single-branch https://github.com/stockholm-3/just-weather.git ../lib
 
       - name: Build
         run: |

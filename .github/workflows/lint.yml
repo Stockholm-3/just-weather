@@ -20,6 +20,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libcurl4-openssl-dev bear
+          #install jansson from source
           git clone --branch lib --single-branch https://github.com/stockholm-3/just-weather.git ../lib
 
       - name: Generate compile_commands.json

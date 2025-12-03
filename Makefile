@@ -8,6 +8,7 @@ BUILD_MODE  ?= debug
 BUILD_DIR   := build/$(BUILD_MODE)
 BIN_SERVER  := $(BUILD_DIR)/server/just-weather
 BIN_CLIENT  := $(BUILD_DIR)/client/just-weather
+BIN_FUZZ    := $(BUILD_DIR)/fuzz/fuzz_http
 
 # ------------------------------------------------------------
 # Build configuration
@@ -32,6 +33,10 @@ JANSSON_CFLAGS := $(filter-out -Werror -Wfatal-errors,$(CFLAGS)) -w
 LDFLAGS     := -flto -Wl,--gc-sections
 LIBS        := -lcurl #curl wont bes used anymore!!
 
+# Fuzz-specific flags
+FUZZ_CFLAGS := -Wall -Wextra -g -O1 -fsanitize=address,undefined
+FUZZ_LDFLAGS := -fsanitize=address,undefined
+
 # ------------------------------------------------------------
 # Source and object files
 # ------------------------------------------------------------
@@ -41,11 +46,15 @@ SRC_SERVER := $(shell find -L $(SRC_DIR)/server -type f -name '*.c' ! -path "*/j
 SRC_CLIENT := $(shell find -L $(SRC_DIR)/client -type f -name '*.c' ! -path "*/jansson/*") \
               $(shell find -L $(SRC_DIR)/lib -type f -name '*.c' ! -path "*/jansson/*")
 
+SRC_FUZZ := tests/fuzz_http.c
+
 OBJ_SERVER  := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC_SERVER))
 OBJ_CLIENT  := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC_CLIENT))
+OBJ_FUZZ    := $(BUILD_DIR)/tests/fuzz_http.o
 
 DEP_SERVER  := $(OBJ_SERVER:.o=.d)
 DEP_CLIENT  := $(OBJ_CLIENT:.o=.d)
+DEP_FUZZ    := $(OBJ_FUZZ:.o=.d)
 
 # ------------------------------------------------------------
 # Jansson integration
@@ -77,6 +86,45 @@ $(BUILD_DIR)/jansson/%.o: lib/jansson/%.c
 	@echo "Compiling Jansson $<... [$(BUILD_TYPE)]"
 	@mkdir -p $(dir $@)
 	@$(CC) $(JANSSON_CFLAGS) -c $< -o $@
+
+# ------------------------------------------------------------
+# Fuzz rules
+# ------------------------------------------------------------
+$(BIN_FUZZ): $(OBJ_FUZZ)
+	@echo "Linking fuzz with sanitizers..."
+	@mkdir -p $(dir $@)
+	@$(CC) $(FUZZ_LDFLAGS) $(OBJ_FUZZ) -o $@
+	@echo "Fuzz built: $(BIN_FUZZ)"
+
+$(OBJ_FUZZ): tests/fuzz_http.c
+	@echo "Compiling fuzz $<..."
+	@mkdir -p $(dir $@)
+	@$(CC) $(FUZZ_CFLAGS) -MMD -MP -c $< -o $@
+
+.PHONY: fuzz
+fuzz: $(BIN_FUZZ)
+	@echo "Fuzz ready for testing."
+
+# Create sample fuzz inputs
+.PHONY: fuzz-inputs
+fuzz-inputs:
+	@mkdir -p tests/inputs
+	@echo -e "GET / HTTP/1.1\r\nHost: example.com\r\n\r\n" > tests/inputs/get.txt
+	@echo -e "POST /api HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello" > tests/inputs/post.txt
+	@echo -e "GET /../etc/passwd HTTP/1.1\r\nHost: evil.com\r\n\r\n" > tests/inputs/traversal.txt
+	@echo -e "GET / HTTP/1.1\r\nHost: test\nInjected: header\r\n\r\n" > tests/inputs/injection.txt
+	@echo -e "POST / HTTP/1.1\r\nContent-Length: 99999\r\n\r\nshort" > tests/inputs/length_mismatch.txt
+	@echo "Created sample fuzz inputs in tests/inputs/"
+
+# Run fuzz tests
+.PHONY: fuzz-test
+fuzz-test: $(BIN_FUZZ) fuzz-inputs
+	@echo "Running fuzz tests..."
+	@set -e; for file in tests/inputs/*.txt; do \
+		echo "=== Testing $$file ==="; \
+		$(BIN_FUZZ) "$$file" || exit 1; \
+	done
+	@echo "Fuzz tests complete."
 
 # ------------------------------------------------------------
 # Release target
@@ -127,6 +175,7 @@ run-client: $(BIN_CLIENT)
 .PHONY: clean
 clean:
 	@rm -rf build
+	@rm -rf tests/inputs
 	@echo "Cleaned build artifacts."
 
 
@@ -203,3 +252,4 @@ workflow: workflow-build workflow-format
 # ------------------------------------------------------------
 -include $(DEP_SERVER)
 -include $(DEP_CLIENT)
+-include $(DEP_FUZZ)

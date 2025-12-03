@@ -224,6 +224,10 @@ lint-ci:
 		echo "✅ Lint passed"; \
 	fi
 
+.PHONY: install-jansson
+install-jansson:
+	git clone --branch lib --single-branch https://github.com/stockholm-3/just-weather.git ../lib
+
 # ------------------------------------------------------------
 # GitHub Actions (act)
 # ------------------------------------------------------------

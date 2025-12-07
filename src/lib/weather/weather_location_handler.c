@@ -7,6 +7,7 @@
 #include "geocoding_api.h"
 #include "open_meteo_api.h"
 #include "open_meteo_handler.h"
+#include "popular_cities.h"
 #include "response_builder.h"
 
 #include <jansson.h>
@@ -15,7 +16,11 @@
 #include <string.h>
 
 /* Global state for lazy initialization */
-static bool g_initialized = false;
+static bool             g_initialized        = false;
+static PopularCitiesDB* s_popular_cities_db = NULL;
+
+/* External reference to geocoding API's global popular cities DB pointer */
+extern void* g_popular_cities_db;
 
 /* Internal functions */
 static void url_decode(const char* src, char* dst, size_t dst_size);
@@ -50,6 +55,23 @@ static int ensure_initialized(void) {
     if (geocoding_api_init(&geo_config) != 0) {
         fprintf(stderr, "[WEATHER_LOCATION] Failed to init geocoding API\n");
         return -1;
+    }
+
+    /* Load popular cities database */
+    int cities_result = popular_cities_load(
+        "./data/hot_cities.json", "./data/all_cities.json",
+        &s_popular_cities_db);
+
+    if (cities_result != 0) {
+        fprintf(stderr,
+                "[WEATHER_LOCATION] Warning: Failed to load popular cities "
+                "database (fallback to API-only mode)\n");
+        /* Not a critical error - continue without local database */
+        g_popular_cities_db = NULL;
+    } else {
+        printf("[WEATHER_LOCATION] Loaded popular cities database\n");
+        /* Set the global pointer for geocoding_api to use */
+        g_popular_cities_db = s_popular_cities_db;
     }
 
     g_initialized = true;
@@ -283,12 +305,26 @@ int weather_location_handler_search_cities(const char* query_string,
         return -1;
     }
 
-    /* Search for cities: check cache first; if missing, fetch and save.
-     * This ensures an appropriate cache file is created when needed while
-     * still using the cache when available.
+    /* URL decode the query */
+    char decoded_query[256] = {0};
+    url_decode(query, decoded_query, sizeof(decoded_query));
+
+    /* Validate minimum query length (2 characters) */
+    if (strlen(decoded_query) < 2) {
+        *response_json = response_builder_error(
+            HTTP_BAD_REQUEST, response_builder_get_error_type(HTTP_BAD_REQUEST),
+            "Query must be at least 2 characters");
+        *status_code = HTTP_BAD_REQUEST;
+        return -1;
+    }
+
+    /* Search for cities using 3-tier strategy:
+     * 1. Popular Cities DB (in-memory, fastest)
+     * 2. File cache (fast)
+     * 3. Open-Meteo API (slow, uses quota)
      */
     GeocodingResponse* response = NULL;
-    int                result   = geocoding_api_search(query, NULL, &response);
+    int                result   = geocoding_api_search_smart(decoded_query, &response);
 
     if (result != 0 || !response) {
         *response_json = response_builder_error(
@@ -301,7 +337,7 @@ int weather_location_handler_search_cities(const char* query_string,
 
     /* Build JSON response */
     json_t* data = json_object();
-    json_object_set_new(data, "query", json_string(query));
+    json_object_set_new(data, "query", json_string(decoded_query));
     json_object_set_new(data, "count", json_integer(response->count));
 
     json_t* cities_array = json_array();
@@ -353,6 +389,14 @@ void weather_location_handler_cleanup(void) {
 
     geocoding_api_cleanup();
     open_meteo_handler_cleanup();
+
+    /* Cleanup popular cities database */
+    if (s_popular_cities_db) {
+        popular_cities_free(s_popular_cities_db);
+        s_popular_cities_db = NULL;
+        g_popular_cities_db = NULL;
+    }
+
     g_initialized = false;
     printf("[WEATHER_LOCATION] Handler cleaned up\n");
 }

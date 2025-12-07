@@ -84,6 +84,24 @@ int geocoding_api_search_readonly_cache(const char*         city_name,
                                         GeocodingResponse** response);
 
 /**
+ * Smart search with 3-tier fallback strategy
+ *
+ * Searches in this order:
+ * 1. Popular Cities DB (in-memory, fastest)
+ * 2. File cache (fast)
+ * 3. Open-Meteo API (slow, uses quota)
+ *
+ * @param query Search query (min 2 characters)
+ * @param response Pointer to search result (caller must free)
+ * @return 0 on success, < 0 on error
+ *
+ * This function minimizes API calls for autocomplete by checking
+ * local databases first.
+ */
+int geocoding_api_search_smart(const char* query,
+                              GeocodingResponse** response);
+
+/**
  * Search for a city by name with an additional region filter
  *
  * @param city_name City name

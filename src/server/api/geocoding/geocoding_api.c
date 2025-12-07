@@ -35,6 +35,9 @@ static GeocodingConfig g_config = {.cache_dir   = DEFAULT_CACHE_DIR,
                                    .max_results = DEFAULT_MAX_RESULTS,
                                    .language    = DEFAULT_LANGUAGE};
 
+/* Popular cities database pointer (set by weather_location_handler) */
+void* g_popular_cities_db = NULL;
+
 /* ============= Internal Structures ============= */
 
 typedef struct {
@@ -281,6 +284,119 @@ int geocoding_api_search_readonly_cache(const char*         city_name,
 
     /* Cache miss: fetch from API but DO NOT save into cache */
     return fetch_from_api(city_name, country, response);
+}
+
+/* ============= Smart Search with 3-Tier Strategy ============= */
+
+/* Forward declarations for popular cities API */
+typedef struct {
+    char name[128];
+    char country[64];
+    char country_code[8];
+    double latitude;
+    double longitude;
+    int population;
+} PopularCity;
+
+extern int popular_cities_search(void* db, const char* query,
+                                 PopularCity** results, size_t* count,
+                                 size_t max_results);
+
+/* Helper: Convert PopularCity array to GeocodingResponse */
+static GeocodingResponse* convert_popular_to_geocoding(PopularCity** cities,
+                                                       size_t count) {
+    if (!cities || count == 0) {
+        return NULL;
+    }
+
+    GeocodingResponse* resp = calloc(1, sizeof(GeocodingResponse));
+    if (!resp) {
+        return NULL;
+    }
+
+    resp->results = calloc(count, sizeof(GeocodingResult));
+    if (!resp->results) {
+        free(resp);
+        return NULL;
+    }
+
+    resp->count = count;
+
+    for (size_t i = 0; i < count; i++) {
+        PopularCity* pc = cities[i];
+        GeocodingResult* gr = &resp->results[i];
+
+        strncpy(gr->name, pc->name, sizeof(gr->name) - 1);
+        strncpy(gr->country, pc->country, sizeof(gr->country) - 1);
+        strncpy(gr->country_code, pc->country_code,
+               sizeof(gr->country_code) - 1);
+        gr->latitude = (float)pc->latitude;
+        gr->longitude = (float)pc->longitude;
+        gr->population = pc->population;
+        gr->id = 0; /* Not available in PopularCity */
+        gr->admin1[0] = '\0';
+        gr->admin2[0] = '\0';
+        gr->timezone[0] = '\0';
+    }
+
+    return resp;
+}
+
+int geocoding_api_search_smart(const char* query,
+                              GeocodingResponse** response) {
+    if (!query || !response) {
+        fprintf(stderr, "[GEOCODING] Invalid parameters\n");
+        return -1;
+    }
+
+    /* Validate minimum query length */
+    if (strlen(query) < 2) {
+        fprintf(stderr, "[GEOCODING] Query too short (min 2 characters)\n");
+        return -1;
+    }
+
+    /* Tier 1: Search in Popular Cities DB */
+    if (g_popular_cities_db) {
+        PopularCity* popular_results[10];
+        size_t popular_count = 0;
+
+        int ret = popular_cities_search(g_popular_cities_db, query,
+                                       popular_results, &popular_count, 10);
+
+        if (ret == 0 && popular_count > 0) {
+            printf("[GEOCODING] Found %zu results in popular cities DB\n",
+                   popular_count);
+
+            *response = convert_popular_to_geocoding(popular_results,
+                                                     popular_count);
+
+            if (*response) {
+                return 0; /* SUCCESS - found in local DB */
+            }
+        }
+    }
+
+    /* Tier 2: Search in exact cache match */
+    if (geocoding_api_search_readonly_cache(query, NULL, response) == 0) {
+        if (response && *response && (*response)->count > 0) {
+            printf("[GEOCODING] Found %d results in cache\n",
+                   (*response)->count);
+            return 0; /* SUCCESS - found in cache */
+        }
+    }
+
+    /* Tier 3: Fallback to API */
+    printf("[GEOCODING] Cache miss, fetching from API for query: %s\n", query);
+
+    int api_result = fetch_from_api(query, NULL, response);
+
+    if (api_result == 0 && *response) {
+        /* Save to cache for future requests */
+        /* Note: fetch_from_api already handles caching internally */
+        printf("[GEOCODING] API returned %d results\n", (*response)->count);
+    }
+
+    return api_result;
 }
 
 int geocoding_api_search_detailed(const char* city_name, const char* region,

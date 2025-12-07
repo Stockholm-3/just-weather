@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Just Weather - Autocomplete Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 32px;
+            text-align: center;
+        }
+
+        .search-container {
+            position: relative;
+            margin-bottom: 30px;
+        }
+
+        #cityInput {
+            width: 100%;
+            padding: 16px 20px;
+            font-size: 18px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        #cityInput:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        #cityInput::placeholder {
+            color: #999;
+        }
+
+        .suggestions-container {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            max-height: 400px;
+            overflow-y: auto;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            margin-top: -8px;
+        }
+
+        .suggestions-container.active {
+            display: block;
+        }
+
+        .suggestion-item {
+            padding: 16px 20px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background-color 0.2s ease;
+        }
+
+        .suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+        .suggestion-item:hover {
+            background-color: #f8f9ff;
+        }
+
+        .city-name {
+            font-weight: 600;
+            font-size: 16px;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .city-details {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 20px;
+            color: #999;
+            font-size: 14px;
+        }
+
+        #weatherResult {
+            background: #f8f9ff;
+            border-radius: 8px;
+            padding: 20px;
+            display: none;
+        }
+
+        #weatherResult.active {
+            display: block;
+        }
+
+        #weatherResult h3 {
+            color: #333;
+            margin-bottom: 16px;
+            font-size: 24px;
+        }
+
+        .weather-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+        }
+
+        .weather-item {
+            padding: 12px;
+            background: white;
+            border-radius: 6px;
+            border-left: 3px solid #667eea;
+        }
+
+        .weather-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .weather-value {
+            font-size: 18px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 16px;
+            border-radius: 8px;
+            border-left: 4px solid #c33;
+            margin-top: 20px;
+        }
+
+        .info-text {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin-top: 20px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Just Weather</h1>
+
+        <div class="search-container">
+            <input type="text"
+                   id="cityInput"
+                   placeholder="Enter city name (min. 2 characters)"
+                   autocomplete="off"
+                   spellcheck="false">
+
+            <div id="suggestions" class="suggestions-container"></div>
+        </div>
+
+        <div id="weatherResult"></div>
+
+        <div class="info-text">
+            Enter a city name to search for weather. Autocomplete uses a<br>
+            local database of popular cities for instant results.
+        </div>
+    </div>
+
+    <script>
+        let debounceTimer;
+        const MIN_QUERY_LENGTH = 2;
+        const DEBOUNCE_DELAY = 300;
+        const API_BASE = 'http://localhost:10680';
+
+        const cityInput = document.getElementById('cityInput');
+        const suggestionsContainer = document.getElementById('suggestions');
+        const weatherResult = document.getElementById('weatherResult');
+
+        cityInput.addEventListener('input', function() {
+            const query = this.value.trim();
+
+            clearTimeout(debounceTimer);
+
+            if (query.length < MIN_QUERY_LENGTH) {
+                hideSuggestions();
+                return;
+            }
+
+            showLoading();
+
+            debounceTimer = setTimeout(() => {
+                fetchCitySuggestions(query);
+            }, DEBOUNCE_DELAY);
+        });
+
+        cityInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                hideSuggestions();
+            }
+        });
+
+        async function fetchCitySuggestions(query) {
+            try {
+                const url = `${API_BASE}/v1/cities?query=${encodeURIComponent(query)}`;
+                console.log('Fetching:', url);
+
+                const response = await fetch(url);
+
+                if (!response.ok) {
+                    console.error('API error:', response.status);
+                    showError('Error loading cities');
+                    return;
+                }
+
+                const data = await response.json();
+                console.log('Response data:', data);
+
+                if (data.success === true) {
+                    console.log('Cities found:', data.data.cities?.length || 0);
+                    displaySuggestions(data.data.cities || []);
+                } else {
+                    showError(data.error?.message || 'Unknown error');
+                }
+
+            } catch (error) {
+                console.error('Fetch error:', error);
+                showError('Server connection error');
+            }
+        }
+
+        function showLoading() {
+            suggestionsContainer.innerHTML = '<div class="loading">Loading...</div>';
+            suggestionsContainer.classList.add('active');
+        }
+
+        function displaySuggestions(cities) {
+            suggestionsContainer.innerHTML = '';
+
+            if (!cities || cities.length === 0) {
+                suggestionsContainer.innerHTML = '<div class="no-results">No cities found</div>';
+                suggestionsContainer.classList.add('active');
+                return;
+            }
+
+            cities.forEach(city => {
+                const item = document.createElement('div');
+                item.className = 'suggestion-item';
+
+                const nameDiv = document.createElement('div');
+                nameDiv.className = 'city-name';
+                nameDiv.textContent = city.name;
+
+                const detailsDiv = document.createElement('div');
+                detailsDiv.className = 'city-details';
+
+                let details = city.country;
+                if (city.region) {
+                    details += `, ${city.region}`;
+                }
+                if (city.population) {
+                    const popM = (city.population / 1000000).toFixed(1);
+                    details += ` • ${popM}M pop`;
+                }
+
+                detailsDiv.textContent = details;
+
+                item.appendChild(nameDiv);
+                item.appendChild(detailsDiv);
+
+                item.onclick = () => selectCity(city);
+                suggestionsContainer.appendChild(item);
+            });
+
+            suggestionsContainer.classList.add('active');
+        }
+
+        function hideSuggestions() {
+            suggestionsContainer.classList.remove('active');
+        }
+
+        function showError(message) {
+            suggestionsContainer.innerHTML = `<div class="no-results">${message}</div>`;
+            suggestionsContainer.classList.add('active');
+        }
+
+        async function selectCity(city) {
+            cityInput.value = city.name;
+            hideSuggestions();
+
+            weatherResult.innerHTML = '<div class="loading">Loading weather...</div>';
+            weatherResult.classList.add('active');
+
+            try {
+                const response = await fetch(
+                    `${API_BASE}/v1/weather?city=${encodeURIComponent(city.name)}&country=${city.country_code}`
+                );
+
+                const data = await response.json();
+
+                if (data.success === true) {
+                    displayWeather(city, data.data);
+                } else {
+                    weatherResult.innerHTML = `<div class="error">${data.error?.message || 'Error loading weather'}</div>`;
+                }
+            } catch (error) {
+                weatherResult.innerHTML = '<div class="error">Server connection error</div>';
+            }
+        }
+
+        function displayWeather(city, data) {
+            const weather = data.current_weather;
+            const location = data.location;
+
+            weatherResult.innerHTML = `
+                <h3>${location.name}, ${location.country}</h3>
+                <div class="weather-info">
+                    <div class="weather-item">
+                        <div class="weather-label">Temperature</div>
+                        <div class="weather-value">${weather.temperature}°C</div>
+                    </div>
+                    <div class="weather-item">
+                        <div class="weather-label">Description</div>
+                        <div class="weather-value">${weather.weather_description}</div>
+                    </div>
+                    <div class="weather-item">
+                        <div class="weather-label">Wind</div>
+                        <div class="weather-value">${weather.windspeed} km/h ${weather.winddirection_name}</div>
+                    </div>
+                    <div class="weather-item">
+                        <div class="weather-label">Humidity</div>
+                        <div class="weather-value">${weather.humidity}%</div>
+                    </div>
+                    <div class="weather-item">
+                        <div class="weather-label">Pressure</div>
+                        <div class="weather-value">${weather.pressure} hPa</div>
+                    </div>
+                    <div class="weather-item">
+                        <div class="weather-label">Precipitation</div>
+                        <div class="weather-value">${weather.precipitation} mm</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        document.addEventListener('click', function(e) {
+            if (e.target !== cityInput && !suggestionsContainer.contains(e.target)) {
+                hideSuggestions();
+            }
+        });
+    </script>
+</body>
+</html>

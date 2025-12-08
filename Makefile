@@ -172,6 +172,10 @@ run-server: $(BIN_SERVER)
 run-client: $(BIN_CLIENT)
 	./$(BIN_CLIENT)
 
+.PHONY: run-cpp
+run-cpp:
+	@$(MAKE) -C cpp && ./build/cpp/just-weather
+
 .PHONY: clean
 clean:
 	@rm -rf build

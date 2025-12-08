@@ -1,8 +1,7 @@
 CXX = g++
 CXXFLAGS = -std=c++17 -Iinclude -Wall -Wextra -O0 -g
 SRC = $(wildcard src/*.cpp)
-OBJ_DIR = build/cpp
-OUT = $(OBJ_DIR)/just-weather
+OUT = ../build/cpp/just-weather
 
 all: $(OUT)
 
@@ -11,12 +10,12 @@ $(OUT): $(SRC)
 	$(CXX) $(CXXFLAGS) $(SRC) -o $@
 
 run: $(OUT)
-	./$(OUT)
+	../build/cpp/just-weather
 
 asan: CXXFLAGS += -fsanitize=address -g -O1
 asan: clean $(OUT)
 
 clean:
-	rm -rf build/cpp
+	rm -f ../build/cpp/just-weather
 
 .PHONY: all run clean asan

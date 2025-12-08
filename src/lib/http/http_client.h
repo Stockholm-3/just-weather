@@ -1,5 +1,5 @@
-#ifndef HTTP_CLIENT_H
-#define HTTP_CLIENT_H
+#ifndef __HTTP_CLIENT_H_
+#define __HTTP_CLIENT_H_
 
 #include "smw.h"
 #include "tcp_client.h"
@@ -9,25 +9,25 @@
 #endif
 
 typedef enum {
-    HTTP_CLIENT_STATE_INIT       = 0,
-    HTTP_CLIENT_STATE_CONNECT    = 1,
-    HTTP_CLIENT_STATE_CONNECTING = 2,
-    HTTP_CLIENT_STATE_WRITING    = 3,
-    HTTP_CLIENT_STATE_READING    = 4, // kanske lägger till connecting
-    HTTP_CLIENT_STATE_DONE       = 5,
-    HTTP_CLIENT_STATE_DISPOSE    = 6,
+    http_client_state_init       = 0,
+    http_client_state_connect    = 1,
+    http_client_state_connecting = 2,
+    http_client_state_writing    = 3,
+    http_client_state_reading    = 4, // kanske lägger till connecting
+    http_client_state_done       = 5,
+    http_client_state_dispose    = 6,
 
-} HttpClientState;
+} http_client_state;
 
 // TODO:change to send response with heap instead of copyuting to
 // stack!!!!!!!!!!!!!!!!!!!
 typedef struct {
-    HttpClientState state;
-    SmwTask*        task;
-    char            url[http_client_max_url_length + 1];
-    uint64_t        timeout;
+    http_client_state state;
+    SmwTask*          task;
+    char              url[http_client_max_url_length + 1];
+    uint64_t          timeout;
 
-    void (*callback)(const char* event, const char* response);
+    void (*callback)(const char* _Event, const char* _Response);
 
     uint64_t timer;
 
@@ -42,27 +42,26 @@ typedef struct {
     int      status_code;      // HTTP status code (200, 404, etc.)
     uint8_t* body;             // Extracted response body
 
-    /* HTTP transfer encoding support */
-    int chunked;          // Transfer-Encoding: chunked detected
-    int connection_close; // Connection: close header present
-
     TCPClient*
          tcp_conn;      // Handle to TCP connection, är en tcp connection struct
     char hostname[256]; // Parsed from URL
     char path[512];     // Parsed from URL
     char port[16];      // Parsed from URL
-    char response[8192];
-} HttpClient;
+    
+    uint8_t* response_buffer;  // Heap-allocated response buffer
+    size_t   response_size;    // Size of response buffer
+} http_client;
 
-HttpClientState http_client_work_init(HttpClient* client);
-HttpClientState http_client_work_connect(HttpClient* client);
-HttpClientState http_client_work_writing(HttpClient* client);
-HttpClientState
-http_client_work_reading(HttpClient* client); // THIS WAS MISSING
-HttpClientState http_client_work_done(HttpClient* client);
+http_client_state http_client_work_init(http_client* _Client);
+http_client_state http_client_work_connect(http_client* _Client);
+http_client_state http_client_work_writing(http_client* _Client);
+http_client_state
+http_client_work_reading(http_client* _Client); // THIS WAS MISSING
+http_client_state http_client_work_done(http_client* _Client);
 
-int http_client_get(const char* url, uint64_t timeout,
-                    void (*callback)(const char* event, const char* response),
+int http_client_get(const char* _URL, uint64_t _Timeout,
+                    void (*_Callback)(const char* _Event,
+                                      const char* _Response),
                     const char* port);
 
-#endif // http_client_h
+#endif //__http_client_h_

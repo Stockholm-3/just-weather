@@ -45,7 +45,6 @@ LIBS        :=
 SRC_SERVER := $(shell find -L $(SRC_DIR)/server -type f -name '*.c' ! -path "*/jansson/*") \
               $(shell find -L $(SRC_DIR)/lib -type f -name '*.c' ! -path "*/jansson/*")
 
-SRC_CLIENT := $(shell find -L $(SRC_DIR)/client -type f -name '*.c' ! -path "*/jansson/*" ! -name '*.backup')
 
 OBJ_SERVER  := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC_SERVER))
 OBJ_CLIENT  := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC_CLIENT))
@@ -85,11 +84,6 @@ $(BUILD_DIR)/lib/%.o: $(SRC_DIR)/lib/%.c
 	@echo "Compiling lib $<... [$(BUILD_TYPE)]"
 	@mkdir -p $(dir $@)
 	@$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD_DIR)/client/%.o: $(SRC_DIR)/client/%.c
-	@echo "Compiling client $<... [$(BUILD_TYPE)]"
-	@mkdir -p $(dir $@)
-	@$(CC) $(CFLAGS_CLIENT) -c $< -o $@
 
 $(BUILD_DIR)/jansson/%.o: lib/jansson/%.c
 	@echo "Compiling Jansson $<... [$(BUILD_TYPE)]"
@@ -137,32 +131,7 @@ asan:
 .PHONY: run-server
 run-server: $(BIN_SERVER)
 	./$(BIN_SERVER)
-
-.PHONY: run-client
-run-client: $(BIN_CLIENT)
-	@echo "Just Weather Client - Usage Examples:"
-	@echo ""
-	@./$(BIN_CLIENT) 2>&1 || true
-
-.PHONY: test-client
-test-client: $(BIN_CLIENT)
-	@echo "Testing client with Stockholm weather..."
-	@./$(BIN_CLIENT) current 59.33 18.07
-
-.PHONY: test-client-city
-test-client-city: $(BIN_CLIENT)
-	@echo "Testing client with city search..."
-	@./$(BIN_CLIENT) weather Stockholm SE
-
-.PHONY: test-client-search
-test-client-search: $(BIN_CLIENT)
-	@echo "Testing client city search..."
-	@./$(BIN_CLIENT) cities Stock
-
-.PHONY: client-interactive
-client-interactive: $(BIN_CLIENT)
-	@./$(BIN_CLIENT) interactive
-
+	
 .PHONY: clean
 clean:
 	@rm -rf build

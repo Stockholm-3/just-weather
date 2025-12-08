@@ -75,27 +75,58 @@ build/<mode>/client/just-weather
 http://stockholm3.onvo.se:81/v1/
 ```
 
+All responses follow a standardized format with `success` field and `data` payload.
+
 ---
 
 ### Endpoints
 
+#### 1. Get Current Weather by Coordinates
+
 ```
-GET /current
+GET /v1/current?lat={latitude}&lon={longitude}
 ```
 
-**Description:**  
-Retrieves the current weather data for the specified geographic coordinates.
+**Description:**
+Retrieves current weather data for specific geographic coordinates.
 
-**Query Parameters:**  
+**Query Parameters:**
 
-| Parameter | Type   | Required | Description                        |
-|-----------|--------|----------|------------------------------------|
-| `lat`     | float  | Yes      | Latitude of the location (e.g., 59.33) |
-| `lon`     | float  | Yes      | Longitude of the location (e.g., 18.07) |
+| Parameter | Type   | Required | Description                        | Example  |
+|-----------|--------|----------|------------------------------------|----------|
+| `lat`     | float  | Yes      | Latitude of the location           | `59.33`  |
+| `lon`     | float  | Yes      | Longitude of the location          | `18.07`  |
 
-**Example Request:**  
+**Example Request:**
 ```bash
 curl "http://stockholm3.onvo.se:81/v1/current?lat=59.33&lon=18.07"
+```
+
+**Response Format:**
+```json
+{
+  "current": {
+    "temperature": 27.0,
+    "temperature_unit": "°C",
+    "windspeed": 17.8,
+    "windspeed_unit": "km/h",
+    "wind_direction_10m": 173,
+    "wind_direction_name": "South",
+    "weather_code": 2,
+    "weather_description": "Partly cloudy",
+    "is_day": 1,
+    "precipitation": 0.0,
+    "precipitation_unit": "mm",
+    "humidity": 0.0,
+    "pressure": 1008.6,
+    "time": 1764084412,
+    "city_name": "Location (1.0000, 2.0000)"
+  },
+  "coords": {
+    "latitude": 1.0,
+    "longitude": 2.0
+  }
+}
 ```
 
 **Response Fields:**
@@ -105,47 +136,215 @@ curl "http://stockholm3.onvo.se:81/v1/current?lat=59.33&lon=18.07"
 | `coords.latitude`             | float   | Latitude of the requested location               |
 | `coords.longitude`            | float   | Longitude of the requested location              |
 | `current.temperature`         | float   | Current air temperature                          |
-| `current.temperature_unit`    | string  | Temperature unit used (e.g. °C)                  |
+| `current.temperature_unit`    | string  | Temperature unit (°C)                            |
 | `current.windspeed`           | float   | Wind speed                                       |
-| `current.windspeed_unit`      | string  | Wind speed unit (e.g. km/h)                      |
-| `current.wind_direction_10m`  | integer | Wind direction in degrees                        |
-| `current.wind_direction_name` | string  | Cardinal direction of the wind (e.g. South)      |
-| `current.weather_code`        | integer | Weather condition code                           |
+| `current.windspeed_unit`      | string  | Wind speed unit (km/h)                           |
+| `current.wind_direction_10m`  | integer | Wind direction in degrees (0-360)                |
+| `current.wind_direction_name` | string  | Cardinal direction (e.g., "South", "North-East") |
+| `current.weather_code`        | integer | Weather condition code (WMO standard)            |
 | `current.weather_description` | string  | Human-readable weather description               |
 | `current.is_day`              | integer | 1 if daytime, 0 if nighttime                     |
 | `current.precipitation`       | float   | Precipitation amount                             |
-| `current.precipitation_unit`  | string  | Precipitation measurement unit (e.g. mm)         |
+| `current.precipitation_unit`  | string  | Precipitation unit (mm)                          |
 | `current.humidity`            | float   | Relative humidity percentage                     |
 | `current.pressure`            | float   | Atmospheric pressure in hPa                      |
 | `current.time`                | integer | UNIX timestamp of the measurement                |
 | `current.city_name`           | string  | Name of the location                             |
 
-## Example Response
+---
+
+#### 2. Get Weather by City Name
+
+```
+GET /v1/weather?city={city_name}&country={country_code}
+```
+
+**Description:**
+Retrieves current weather for a city by name. Automatically geocodes the city and returns weather data with location details.
+
+**Query Parameters:**
+
+| Parameter | Type   | Required | Description                              | Example     |
+|-----------|--------|----------|------------------------------------------|-------------|
+| `city`    | string | Yes      | City name (URL encoded)                  | `Stockholm` |
+| `country` | string | No       | ISO 3166-1 alpha-2 country code          | `SE`        |
+| `region`  | string | No       | Region/state name for disambiguation     | `California`|
+
+**Example Requests:**
+```bash
+# Simple city search
+curl "http://stockholm3.onvo.se:81/v1/weather?city=Stockholm"
+
+# City with country filter
+curl "http://stockholm3.onvo.se:81/v1/weather?city=Stockholm&country=SE"
+
+# City with region (for disambiguation)
+curl "http://stockholm3.onvo.se:81/v1/weather?city=Paris&region=Texas&country=US"
+```
+
+**Response Format:**
 ```json
 {
-  "current": {
-    "temperature": 27.0,
-    "temperature_unit": "°C",
-    "windspeed": 17.8,
-    "windspeed_unit": "km/h",
-    "wind_direction_10m": 173,
-    "weather_code": 2,
-    "is_day": 1,
-    "precipitation": 0.0,
-    "precipitation_unit": "mm",
-    "humidity": 0.0,
-    "pressure": 1008.6,
-    "time": 1764084412,
-    "city_name": "Location (1.0000, 2.0000)",
-    "weather_description": "Partly cloudy",
-    "wind_direction_name": "South"
-  },
-  "coords": {
-    "latitude": 1.0,
-    "longitude": 2.0
+  "success": true,
+  "data": {
+    "location": {
+      "name": "Stockholm",
+      "country": "Sweden",
+      "country_code": "SE",
+      "region": "Stockholm",
+      "latitude": 59.329380035400391,
+      "longitude": 18.068710327148438,
+      "population": 1515017,
+      "timezone": "Europe/Stockholm"
+    },
+    "current_weather": {
+      "temperature": 6.2,
+      "temperature_unit": "°C",
+      "weather_code": 3,
+      "weather_description": "Overcast",
+      "windspeed": 6.8,
+      "windspeed_unit": "km/h",
+      "winddirection": 153,
+      "winddirection_name": "South-Southeast",
+      "humidity": 0.0,
+      "pressure": 1006.6,
+      "precipitation": 0.0,
+      "is_day": false
+    }
   }
 }
 ```
+
+**Response Fields:**
+
+| Field                                | Type    | Description                                |
+|--------------------------------------|---------|--------------------------------------------|
+| `success`                            | boolean | Request success status                     |
+| `data.location.name`                 | string  | City name                                  |
+| `data.location.country`              | string  | Full country name                          |
+| `data.location.country_code`         | string  | ISO 3166-1 alpha-2 country code            |
+| `data.location.region`               | string  | Region/state/province name                 |
+| `data.location.latitude`             | float   | Latitude coordinate                        |
+| `data.location.longitude`            | float   | Longitude coordinate                       |
+| `data.location.population`           | integer | City population                            |
+| `data.location.timezone`             | string  | IANA timezone identifier                   |
+| `data.current_weather.temperature`   | float   | Current temperature                        |
+| `data.current_weather.temperature_unit` | string | Temperature unit (°C)                   |
+| `data.current_weather.weather_code`  | integer | WMO weather code                           |
+| `data.current_weather.weather_description` | string | Human-readable weather description  |
+| `data.current_weather.windspeed`     | float   | Wind speed                                 |
+| `data.current_weather.windspeed_unit`| string  | Wind speed unit (km/h)                     |
+| `data.current_weather.winddirection` | integer | Wind direction in degrees (0-360)          |
+| `data.current_weather.winddirection_name` | string | Cardinal wind direction             |
+| `data.current_weather.humidity`      | float   | Relative humidity percentage               |
+| `data.current_weather.pressure`      | float   | Atmospheric pressure (hPa)                 |
+| `data.current_weather.precipitation` | float   | Precipitation amount (mm)                  |
+| `data.current_weather.is_day`        | boolean | Day/night indicator                        |
+
+---
+
+#### 3. City Search (Autocomplete)
+
+```
+GET /v1/cities?query={search_term}
+```
+
+**Description:**
+Search for cities by name prefix. Optimized for autocomplete with 3-tier search strategy:
+1. Popular Cities DB (in-memory, fastest)
+2. File cache (fast)
+3. Open-Meteo Geocoding API (fallback)
+
+**Query Parameters:**
+
+| Parameter | Type   | Required | Description                              | Example  |
+|-----------|--------|----------|------------------------------------------|----------|
+| `query`   | string | Yes      | City search term (min 2 characters)      | `Stock`  |
+
+**Example Requests:**
+```bash
+# Autocomplete search
+curl "http://stockholm3.onvo.se:81/v1/cities?query=Stock"
+
+# Single city lookup
+curl "http://stockholm3.onvo.se:81/v1/cities?query=Kyiv"
+```
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "data": {
+    "query": "Stock",
+    "count": 9,
+    "cities": [
+      {
+        "name": "Stockholm",
+        "country": "Sweden",
+        "country_code": "SE",
+        "latitude": 59.327499389648438,
+        "longitude": 18.05470085144043,
+        "population": 995574
+      },
+      {
+        "name": "Stockton",
+        "country": "United States",
+        "country_code": "US",
+        "latitude": 37.97650146484375,
+        "longitude": -121.31089782714844,
+        "population": 416005
+      }
+    ]
+  }
+}
+```
+
+**Response Fields:**
+
+| Field                     | Type    | Description                                |
+|---------------------------|---------|--------------------------------------------|
+| `success`                 | boolean | Request success status                     |
+| `data.query`              | string  | The search query used                      |
+| `data.count`              | integer | Number of cities found                     |
+| `data.cities`             | array   | Array of city objects                      |
+| `cities[].name`           | string  | City name                                  |
+| `cities[].country`        | string  | Full country name                          |
+| `cities[].country_code`   | string  | ISO 3166-1 alpha-2 country code            |
+| `cities[].latitude`       | float   | Latitude coordinate                        |
+| `cities[].longitude`      | float   | Longitude coordinate                       |
+| `cities[].population`     | integer | City population (optional)                 |
+| `cities[].region`         | string  | Region/state/province (optional)           |
+
+---
+
+### Error Responses
+
+All endpoints return standardized error responses:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": 400,
+    "type": "Bad Request",
+    "message": "Missing required parameter: query"
+  }
+}
+```
+
+**Common Error Codes:**
+
+| Code | Type                  | Description                                |
+|------|-----------------------|--------------------------------------------|
+| 400  | Bad Request           | Missing or invalid parameters              |
+| 404  | Not Found             | Endpoint or resource not found             |
+| 500  | Internal Server Error | Server-side error or API failure           |
+
+---
+
+### CORS Support
+
+All endpoints support CORS with `Access-Control-Allow-Origin: *` header for frontend integration.
 
 ## Authors
 

@@ -1,43 +1,37 @@
-#include "http_client.h"
-#include "smw.h"
+#include "api/weather_client.h"
+#include "cli.h"
 
-#include <stdint.h>
 #include <stdio.h>
-#include <time.h>
+#include <stdlib.h>
+#include <string.h>
 
-// Manual implementation of system_monotonic_ms
-uint64_t system_monotonic_ms(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
-}
+#define EXIT_INVALID_ARGS 1
+#define EXIT_NETWORK_ERROR 2
 
-void response_callback(const char* event, const char* response) {
-    printf("\n\r------------ HTTP CLIENT CALLBACK ------------\n\r");
-    printf("Event: %s\n\r", event);
-    if (response) {
-        printf("Response: %s\n\r", response);
-    }
-    printf("------------ END OF CALLBACK ------------\n\r");
-}
-
-int main() {
-    smw_init();
-
-    // Use http_client_get with port parameter
-    if (http_client_get("stockholm3.onvo.se:81", 10000, response_callback,
-                        "81") != 0) {
-        perror("Failed to create HTTP client");
-        return -1;
+int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        cli_print_usage(argv[0]);
+        return EXIT_INVALID_ARGS;
     }
 
-    printf("HTTP client started, making request to localhost:8080...\n");
-
-    // Main loop with manual timeout handling in the state machine
-    while (1) {
-        smw_work(system_monotonic_ms());
+    WeatherClient* client = weather_client_create("localhost", 10680);
+    if (!client) {
+        fprintf(stderr, "Failed to create weather client\n");
+        return EXIT_NETWORK_ERROR;
     }
 
-    smw_dispose();
-    return 0;
+    const char* command   = argv[1];
+    int         exit_code = 0;
+
+    if (strcmp(command, "interactive") == 0 || strcmp(command, "-i") == 0) {
+        cli_interactive_mode(client);
+    } else {
+        exit_code = cli_execute_command(client, argc, argv);
+        if (exit_code == EXIT_INVALID_ARGS) {
+            cli_print_usage(argv[0]);
+        }
+    }
+
+    weather_client_destroy(client);
+    return exit_code;
 }

@@ -1,3 +1,4 @@
+
 #ifndef WEATHER_CLIENT_HPP
 #define WEATHER_CLIENT_HPP
 

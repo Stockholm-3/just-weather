@@ -172,17 +172,61 @@ run-server: $(BIN_SERVER)
 run-client: $(BIN_CLIENT)
 	./$(BIN_CLIENT)
 
-.PHONY: run-cpp
-run-cpp:
-	@$(MAKE) -C cpp && ./build/cpp/just-weather
-
 .PHONY: clean
 clean:
+	@echo "Cleaning build artifacts..."
 	@rm -rf build
-	@rm -rf tests/inputs
-	@echo "Cleaned build artifacts."
 
+# Add these targets to your root Makefile after the run-cpp target
 
+# ------------------------------------------------------------
+# C++ Client Setup
+# ------------------------------------------------------------
+.PHONY: cpp-setup
+cpp-setup:
+	@echo "Setting up C++ client dependencies..."
+	@if [ ! -f cpp/include/nlohmann/json.hpp ]; then \
+		echo "Downloading nlohmann/json.hpp..."; \
+		mkdir -p cpp/include/nlohmann; \
+		curl -L https://github.com/nlohmann/json/releases/latest/download/json.hpp \
+			-o cpp/include/nlohmann/json.hpp; \
+		echo "✓ Downloaded to cpp/include/nlohmann/json.hpp"; \
+	else \
+		echo "✓ nlohmann/json.hpp already exists"; \
+	fi
+
+.PHONY: cpp-build
+cpp-build: cpp-setup
+	@$(MAKE) -C cpp
+
+.PHONY: cpp-clean
+cpp-clean:
+	@$(MAKE) -C cpp clean
+
+# Update the existing run-cpp target to ensure setup
+.PHONY: run-cpp
+run-cpp: cpp-build
+	@./build/cpp/just-weather
+
+# ------------------------------------------------------------
+# Cache Management
+# ------------------------------------------------------------
+.PHONY: clean-cache
+clean-cache:
+	@echo "Cleaning server cache..."
+	@rm -rf cache/*.json
+	@echo "✓ Server cache cleared"
+
+.PHONY: clean-data
+clean-data:
+	@echo "Cleaning C++ client data..."
+	@rm -rf data/*.json
+	@echo "✓ Client data cleared"
+
+.PHONY: clean-all-cache
+clean-all-cache: clean-cache clean-data
+	@echo "✓ All cached data cleared"
+	
 # ------------------------------------------------------------
 # Start server in detached tmux session
 # ------------------------------------------------------------
